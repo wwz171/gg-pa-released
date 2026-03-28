@@ -1,0 +1,4 @@
+# Minimal GG-PA configuration placeholder.
+transport: local
+logging:
+  level: INFO

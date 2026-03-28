@@ -1,0 +1,19 @@
+name: ggpa
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10,<3.13
+  - pip
+  - numpy>=1.20
+  - pyyaml>=6.0
+  - matplotlib>=3.5
+  - seaborn>=0.12
+  - mdtraj>=1.9.9
+  - openmm>=8.0
+  - jupyterlab>=4.0
+  - ipykernel>=6.0
+  - pip:
+      # Default CPU-safe install. Replace this with the official
+      # PyTorch command after environment creation if you need CUDA.
+      - torch>=2.0
+      - pymbar>=4.0
