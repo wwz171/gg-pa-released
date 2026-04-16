@@ -15,6 +15,18 @@ from ggpa.systems.alanine_dipeptide import (
 )
 
 
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _public_repo_path(path: str | Path) -> str:
+    """Return a repo-relative POSIX path for public-facing metadata."""
+    path = Path(path).resolve()
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.name
+
+
 def _wrap_pi(x: np.ndarray) -> np.ndarray:
     return (np.asarray(x, dtype=np.float64) + np.pi) % (2.0 * np.pi) - np.pi
 
@@ -113,7 +125,7 @@ def save_ad_sodium_reference_npz(
         oo_distance_nm=np.asarray(oo_distance_nm, dtype=np.float64),
         n_frames=np.array(len(dihedrals_rad), dtype=np.int64),
         source_label=np.array(source_label),
-        topology_pdb=np.array(str(topology_pdb)),
+        topology_pdb=np.array(_public_repo_path(topology_pdb)),
         oxygen_pair=np.asarray(oxygen_meta["pair"], dtype=np.int64),
         oxygen_atom_names=np.asarray(oxygen_meta["atom_names"]),
         oxygen_residue_names=np.asarray(oxygen_meta["residue_names"]),
@@ -181,8 +193,10 @@ def save_ad_dimer_reference_npz(
         dihedrals_seg2_deg=np.degrees(np.asarray(analysis["dihedrals_seg2"], dtype=np.float64)),
         n_frames=np.array(len(analysis["com_distances"]), dtype=np.int64),
         source_label=np.array(source_label),
-        topology_pdb=np.array(str(topology_pdb)),
-        trajectory_dcd=np.array(str(trajectory_dcd)),
+        topology_pdb=np.array(_public_repo_path(topology_pdb)),
+        trajectory_dcd=np.array(
+            _public_repo_path(trajectory_dcd) if Path(trajectory_dcd).exists() else "not_shipped"
+        ),
     )
     return output_path
 

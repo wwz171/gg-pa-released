@@ -31,11 +31,11 @@ def main() -> None:
         "datasets": [
             {
                 "name": "ad_dimer_md_100ns_ref",
-                "path": str(output_path),
+                "path": output_path.relative_to(root).as_posix(),
                 "source_label": payload["source_label"],
                 "n_frames": payload["n_frames"],
                 "topology_pdb": payload["topology_pdb"],
-                "source_trajectory_dcd": str(dcd_path),
+                "source_trajectory_dcd": "not_shipped",
                 "fields": [
                     "com_dist",
                     "cosine_sim",
@@ -44,6 +44,12 @@ def main() -> None:
                     "dihedrals_seg1",
                     "dihedrals_seg2",
                 ],
+                "frame_interval_ps": 2.0,
+                "total_time_ns": 100.0,
+                "total_time_ps": 100000.0,
+                "time_unit": "ps",
+                "record_stride_frames": 1,
+                "topology_atom_count": 44,
             }
         ]
     }

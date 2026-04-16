@@ -240,6 +240,22 @@ def _laplacian_spectrum_rfft(L: int) -> np.ndarray:
     return 4.0 * (np.sin(np.pi * kx / L) ** 2 + np.sin(np.pi * ky / L) ** 2)
 
 
+def _rfft_last_axis_weights(L: int) -> np.ndarray:
+    """Weights that lift an ``rfftn`` half-spectrum back to full-spectrum norms.
+
+    ``np.fft.rfftn`` only removes conjugate redundancy along the final axis.
+    Interior columns therefore represent two full-spectrum modes and must be
+    counted twice in quadratic forms such as ``psi.T @ Q @ psi``.
+    """
+    w = np.ones((1, L // 2 + 1), dtype=np.float64)
+    if L % 2 == 0:
+        if w.shape[1] > 2:
+            w[:, 1:-1] = 2.0
+    elif w.shape[1] > 1:
+        w[:, 1:] = 2.0
+    return w
+
+
 def _vp_params_at_tau(noise_scheduler, tau: float) -> tuple[float, float]:
     r"""Return :math:`(\bar\alpha, \sigma^2)` at continuous time τ ∈ [0, 1]."""
     T = noise_scheduler.num_timesteps
@@ -411,6 +427,7 @@ class GaussianPBCContext(ContextBase):
         self.L = int(L)
         self._ns = noise_scheduler
         self._lam = _laplacian_spectrum_rfft(L)
+        self._rfft_weights = _rfft_last_axis_weights(L)
         self._h = float(h)
 
     def tempering_factor(self, tau):
@@ -421,7 +438,7 @@ class GaussianPBCContext(ContextBase):
         a2, s2 = _vp_params_at_tau(self._ns, tau)
         q = _precision_spectrum(self._lam, self.J, a2, s2)
         s_hat = np.fft.rfftn(s, s=(self.L, self.L), norm="ortho")
-        result = float(-0.5 * np.sum(q * np.abs(s_hat) ** 2))
+        result = float(-0.5 * np.sum(self._rfft_weights * q * np.abs(s_hat) ** 2))
         if self._h != 0.0:
             result += float(self._h / np.sqrt(a2) * np.sum(s))
         return result
@@ -736,6 +753,7 @@ class FixedQGaussianPBCContext(ContextBase):
         self.L = int(L)
         self._ns = noise_scheduler
         self._lam = _laplacian_spectrum_rfft(L)
+        self._rfft_weights = _rfft_last_axis_weights(L)
         self._h = float(h)
         self.tau_prod = float(tau_prod)
         a2, s2 = _vp_params_at_tau(noise_scheduler, tau_prod)
@@ -743,11 +761,11 @@ class FixedQGaussianPBCContext(ContextBase):
 
     def tempering_factor(self, tau):
         return 1.0
-
+    
     def log_prob(self, s, tau):
         s = np.asarray(s, dtype=np.float64)
         s_hat = np.fft.rfftn(s, s=(self.L, self.L), norm="ortho")
-        result = float(-0.5 * np.sum(self._q_prod * np.abs(s_hat) ** 2))
+        result = float(-0.5 * np.sum(self._rfft_weights * self._q_prod * np.abs(s_hat) ** 2))
         if self._h != 0.0:
             a_prod = np.sqrt(_vp_params_at_tau(self._ns, self.tau_prod)[0])
             result += float(self._h / a_prod * np.sum(s))
