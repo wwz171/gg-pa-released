@@ -22,7 +22,7 @@ This module provides:
 * A rejection sampler for the single-site double-well
   :math:`V(\phi)=(\phi^2-1)^2`.
 * GG-PA adapter classes that couple the lattice system to the
-  :class:`~ggpa.core.kernel.FixedTauKernel` framework:
+  :class:`~ggpa.core.kernel.FixedDiffusionTimeKernel` framework:
   :class:`LatticeVPForwardProcess`, :class:`LatticeDiffusionClient`,
   :class:`GaussianPBCContext`, and :class:`FFTGaussianAggregator`.
 """
@@ -256,10 +256,10 @@ def _rfft_last_axis_weights(L: int) -> np.ndarray:
     return w
 
 
-def _vp_params_at_tau(noise_scheduler, tau: float) -> tuple[float, float]:
-    r"""Return :math:`(\bar\alpha, \sigma^2)` at continuous time τ ∈ [0, 1]."""
+def _vp_params_at_t_diff(noise_scheduler, t_diff: float) -> tuple[float, float]:
+    r"""Return :math:`(\bar\alpha, \sigma^2)` at continuous time t_diff ∈ [0, 1]."""
     T = noise_scheduler.num_timesteps
-    idx = max(0, min(T - 1, int(tau * (T - 1))))
+    idx = max(0, min(T - 1, int(t_diff * (T - 1))))
     ab = float(noise_scheduler.alpha_bars[idx].cpu())
     return ab, 1.0 - ab
 
@@ -273,15 +273,15 @@ def _precision_spectrum(
     if np.any(denom[mask] <= 0):
         raise ValueError(
             f"GG-PA infeasible: min denom = {float(np.min(denom[mask])):.6e}. "
-            "Use a smaller τ or smaller J."
+            "Use a smaller t_diff or smaller J."
         )
     q = np.zeros_like(lam)
     q[mask] = (2.0 * J * lam[mask]) / denom[mask]
     return q
 
 
-def check_max_tau(noise_scheduler, J: float, d: int = 2) -> dict:
-    r"""Maximum feasible τ for GG-PA Gaussian-context construction.
+def check_max_t_diff(noise_scheduler, J: float, d: int = 2) -> dict:
+    r"""Maximum feasible t_diff for GG-PA Gaussian-context construction.
 
     Condition: :math:`\sigma^2 < \alpha^2 / (2J\lambda_{\max})`.
     """
@@ -290,7 +290,7 @@ def check_max_tau(noise_scheduler, J: float, d: int = 2) -> dict:
     ab = noise_scheduler.alpha_bars.detach().cpu().numpy()
     ok = ab >= a_min
     if not np.any(ok):
-        return {"t_max": None, "note": "No feasible τ for this schedule / J"}
+        return {"t_max": None, "note": "No feasible t_diff for this schedule / J"}
     idx = int(np.max(np.where(ok)))
     t_max = max(0.0, idx / (len(ab) - 1) - 1e-6)
     return {
@@ -308,32 +308,32 @@ def check_max_tau(noise_scheduler, J: float, d: int = 2) -> dict:
 class LatticeVPForwardProcess(ForwardProcessBase):
     r"""VP forward process for 2-D lattice fields.
 
-    .. math:: q_\tau(\psi \mid \phi) = \mathcal{N}(\psi;\, \alpha\phi,\, \sigma^2 I)
+    .. math:: q_{t_{\mathrm{diff}}}(\psi \mid \phi) = \mathcal{N}(\psi;\, \alpha\phi,\, \sigma^2 I)
     """
 
     def __init__(self, noise_scheduler):
         self._ns = noise_scheduler
 
-    def alpha(self, tau: float) -> float:
-        ab, _ = _vp_params_at_tau(self._ns, tau)
+    def alpha(self, t_diff: float) -> float:
+        ab, _ = _vp_params_at_t_diff(self._ns, t_diff)
         return float(np.sqrt(ab))
 
-    def sigma(self, tau: float) -> float:
-        _, s2 = _vp_params_at_tau(self._ns, tau)
+    def sigma(self, t_diff: float) -> float:
+        _, s2 = _vp_params_at_t_diff(self._ns, t_diff)
         return float(np.sqrt(max(s2, 0.0)))
 
-    def log_q_fwd(self, y, x, tau):
+    def log_q_fwd(self, y, x, t_diff):
         y = np.asarray(y, dtype=np.float64).ravel()
         x = np.asarray(x, dtype=np.float64).ravel()
-        a, s = self.alpha(tau), self.sigma(tau)
+        a, s = self.alpha(t_diff), self.sigma(t_diff)
         D = y.size
         r = y - a * x
         return float(-0.5 * D * np.log(2.0 * np.pi * s * s) - 0.5 * np.dot(r, r) / (s * s))
 
-    def grad_log_q_fwd(self, y, x, tau):
+    def grad_log_q_fwd(self, y, x, t_diff):
         y = np.asarray(y, dtype=np.float64)
         x = np.asarray(x, dtype=np.float64)
-        a, s = self.alpha(tau), self.sigma(tau)
+        a, s = self.alpha(t_diff), self.sigma(t_diff)
         return -(y - a * x) / (s * s)
 
 
@@ -378,7 +378,7 @@ class LatticeDiffusionClient(ClientBase):
         self.enforce_symmetry = enforce_symmetry
 
     @torch.no_grad()
-    def denoise_sample(self, y, tau, seed=None):
+    def denoise_sample(self, y, t_diff, seed=None):
         """Denoise ψ (L, L) → φ (L, L)."""
         y_np = np.asarray(y, dtype=np.float32)
         shape = y_np.shape
@@ -392,7 +392,7 @@ class LatticeDiffusionClient(ClientBase):
             model = model._orig_mod
 
         phi_flat = model.reverse(
-            y_flat, t_start=tau, t_end=0.0,
+            y_flat, t_start=t_diff, t_end=0.0,
             enforce_symmetry=self.enforce_symmetry,
         )
         return phi_flat.cpu().numpy().ravel().reshape(shape)
@@ -409,7 +409,7 @@ class GaussianPBCContext(ContextBase):
     .. math::
 
         p_{\text{ctx}}(\psi) \propto
-        \exp\!\bigl(-\tfrac{1}{2}\,\psi^\top Q(\tau)\,\psi + b^\top\psi\bigr)
+        \exp\!\bigl(-\tfrac{1}{2}\,\psi^\top Q(t_{\mathrm{diff}})\,\psi + b^\top\psi\bigr)
 
     where the precision eigenvalues are
 
@@ -430,12 +430,12 @@ class GaussianPBCContext(ContextBase):
         self._rfft_weights = _rfft_last_axis_weights(L)
         self._h = float(h)
 
-    def tempering_factor(self, tau):
+    def tempering_factor(self, t_diff):
         return 1.0
 
-    def log_prob(self, s, tau):
+    def log_prob(self, s, t_diff):
         s = np.asarray(s, dtype=np.float64)
-        a2, s2 = _vp_params_at_tau(self._ns, tau)
+        a2, s2 = _vp_params_at_t_diff(self._ns, t_diff)
         q = _precision_spectrum(self._lam, self.J, a2, s2)
         s_hat = np.fft.rfftn(s, s=(self.L, self.L), norm="ortho")
         result = float(-0.5 * np.sum(self._rfft_weights * q * np.abs(s_hat) ** 2))
@@ -443,9 +443,9 @@ class GaussianPBCContext(ContextBase):
             result += float(self._h / np.sqrt(a2) * np.sum(s))
         return result
 
-    def grad_log_prob(self, s, tau):
+    def grad_log_prob(self, s, t_diff):
         s = np.asarray(s, dtype=np.float64)
-        a2, s2 = _vp_params_at_tau(self._ns, tau)
+        a2, s2 = _vp_params_at_t_diff(self._ns, t_diff)
         q = _precision_spectrum(self._lam, self.J, a2, s2)
         s_hat = np.fft.rfftn(s, s=(self.L, self.L), norm="ortho")
         grad = np.fft.irfftn(-q * s_hat, s=(self.L, self.L), norm="ortho")
@@ -453,9 +453,9 @@ class GaussianPBCContext(ContextBase):
             grad = grad + self._h / np.sqrt(a2)
         return grad
 
-    def check_valid_tau(self, tau: float) -> bool:
-        """Return True if τ is within the GG-PA feasibility region."""
-        a2, s2 = _vp_params_at_tau(self._ns, tau)
+    def check_valid_t_diff(self, t_diff: float) -> bool:
+        """Return True if t_diff is within the GG-PA feasibility region."""
+        a2, s2 = _vp_params_at_t_diff(self._ns, t_diff)
         mask = self._lam > 0
         denom = a2 - 2.0 * self.J * self._lam * s2
         return bool(np.all(denom[mask] > 0))
@@ -517,7 +517,7 @@ class FFTGaussianAggregator(AggregationBase):
     # GPU fast path (direct client access, no transport overhead)
     # ------------------------------------------------------------------ #
 
-    def _fast_aggregate_gpu(self, s_current, tau):
+    def _fast_aggregate_gpu(self, s_current, t_diff):
         L = self.L
         cl = self._client
 
@@ -532,14 +532,14 @@ class FFTGaussianAggregator(AggregationBase):
             s_np.ravel()[:, np.newaxis], dtype=torch.float32, device=self._device,
         )
         phi_flat = model.reverse(
-            y_flat, t_start=tau, t_end=0.0,
+            y_flat, t_start=t_diff, t_end=0.0,
             enforce_symmetry=cl.enforce_symmetry,
         )
         phi_gpu = phi_flat.squeeze(-1).reshape(L, L)
         cl._current_x = phi_gpu.detach().cpu().numpy()
 
         # VP parameters
-        a2, s2 = _vp_params_at_tau(self._ns, tau)
+        a2, s2 = _vp_params_at_t_diff(self._ns, t_diff)
         a = np.sqrt(a2)
         if s2 < 1e-12:
             return (a * phi_gpu).cpu().numpy(), {"method": "fft_gaussian_gpu", "degenerate": True}
@@ -563,28 +563,28 @@ class FFTGaussianAggregator(AggregationBase):
         )
         psi_hat = mean_hat + sv_k * z_hat
         psi_gpu = torch.fft.irfftn(psi_hat, s=(L, L), norm="ortho")
-        return psi_gpu.cpu().numpy(), {"method": "fft_gaussian_gpu", "tau": tau}
+        return psi_gpu.cpu().numpy(), {"method": "fft_gaussian_gpu", "t_diff": t_diff}
 
     # ------------------------------------------------------------------ #
     # Standard framework path
     # ------------------------------------------------------------------ #
 
-    def aggregate(self, s_current, tau, **kwargs):
+    def aggregate(self, s_current, t_diff, **kwargs):
         # GPU fast path
         if self._client is not None and self._device is not None and self._device.type != "cpu":
-            return self._fast_aggregate_gpu(s_current, tau)
+            return self._fast_aggregate_gpu(s_current, t_diff)
 
         # Standard path via transport
         server = kwargs["server"]
         transport = kwargs["transport"]
         seed = kwargs.get("seed", None)
 
-        xs = self.fetch_samples(s_current, tau, server, transport)
+        xs = self.fetch_samples(s_current, t_diff, server, transport)
         assert len(xs) == 1, f"FFTGaussianAggregator expects 1 client, got {len(xs)}"
         phi = np.asarray(list(xs.values())[0], dtype=np.float64)
         L = self.L
 
-        a2, s2 = _vp_params_at_tau(self._ns, tau)
+        a2, s2 = _vp_params_at_t_diff(self._ns, t_diff)
         a = np.sqrt(a2)
         if s2 < 1e-12:
             return (a * phi), {"method": "fft_gaussian", "degenerate": True}
@@ -607,7 +607,7 @@ class FFTGaussianAggregator(AggregationBase):
 
         psi_hat = mean_hat + sv_k * z_hat
         psi = np.fft.irfftn(psi_hat, s=(L, L), norm="ortho").real
-        return psi, {"method": "fft_gaussian", "tau": tau}
+        return psi, {"method": "fft_gaussian", "t_diff": t_diff}
 
 
 # =====================================================================
@@ -617,14 +617,14 @@ class FFTGaussianAggregator(AggregationBase):
 
 class FixedQFFTGaussianAggregator(AggregationBase):
     r"""Like :class:`FFTGaussianAggregator` but the context precision Q is
-    computed once at a *fixed* reference τ (``tau_prod``) and reused for all
-    replica tau values.  This avoids the feasibility constraint that limits
-    the maximum τ, allowing wide RE ladders.
+    computed once at a *fixed* reference t_diff (``t_diff_prod``) and reused for all
+    replica t_diff values.  This avoids the feasibility constraint that limits
+    the maximum t_diff, allowing wide RE ladders.
 
     Parameters
     ----------
     J, L, noise_scheduler, h : same as :class:`FFTGaussianAggregator`
-    tau_prod : float
+    t_diff_prod : float
         Reference diffusion time at which Q is precomputed.
     client : LatticeDiffusionClient or None
     device : str or torch.device
@@ -636,7 +636,7 @@ class FixedQFFTGaussianAggregator(AggregationBase):
         L: int,
         noise_scheduler,
         *,
-        tau_prod: float,
+        t_diff_prod: float,
         h: float = 0.0,
         client: LatticeDiffusionClient | None = None,
         device: str | torch.device = "cpu",
@@ -647,14 +647,14 @@ class FixedQFFTGaussianAggregator(AggregationBase):
         self._lam = _laplacian_spectrum_rfft(L)
         self._h = float(h)
         self._client = client
-        self.tau_prod = float(tau_prod)
+        self.t_diff_prod = float(t_diff_prod)
         self._device = torch.device(device) if client is not None else None
 
-        # Precompute Q at tau_prod
-        a2_prod, s2_prod = _vp_params_at_tau(noise_scheduler, tau_prod)
+        # Precompute Q at t_diff_prod
+        a2_prod, s2_prod = _vp_params_at_t_diff(noise_scheduler, t_diff_prod)
         self._q_prod = _precision_spectrum(self._lam, self.J, a2_prod, s2_prod)
 
-    def _fast_aggregate_gpu(self, s_current, tau):
+    def _fast_aggregate_gpu(self, s_current, t_diff):
         L = self.L
         cl = self._client
 
@@ -662,26 +662,26 @@ class FixedQFFTGaussianAggregator(AggregationBase):
         if hasattr(model, "_orig_mod"):
             model = model._orig_mod
 
-        # Denoise at the replica's actual tau
+        # Denoise at the replica's actual t_diff
         s_np = np.asarray(s_current, dtype=np.float32)
         y_flat = torch.tensor(
             s_np.ravel()[:, np.newaxis], dtype=torch.float32, device=self._device,
         )
         phi_flat = model.reverse(
-            y_flat, t_start=tau, t_end=0.0,
+            y_flat, t_start=t_diff, t_end=0.0,
             enforce_symmetry=cl.enforce_symmetry,
         )
         phi_gpu = phi_flat.squeeze(-1).reshape(L, L)
         cl._current_x = phi_gpu.detach().cpu().numpy()
 
-        # VP params at the replica's tau (for the forward-process likelihood)
-        a2, s2 = _vp_params_at_tau(self._ns, tau)
+        # VP params at the replica's t_diff (for the forward-process likelihood)
+        a2, s2 = _vp_params_at_t_diff(self._ns, t_diff)
         a = np.sqrt(a2)
         if s2 < 1e-12:
             return (a * phi_gpu).cpu().numpy(), {"method": "fixedq_fft_gpu", "degenerate": True}
 
         inv_s2 = 1.0 / s2
-        # Use fixed Q from tau_prod
+        # Use fixed Q from t_diff_prod
         A_k = inv_s2 + self._q_prod
         v_k_np = 1.0 / A_k
 
@@ -693,7 +693,7 @@ class FixedQFFTGaussianAggregator(AggregationBase):
 
         if self._h != 0.0:
             # External field with fixed Q's zero-mode contribution
-            a_prod = np.sqrt(_vp_params_at_tau(self._ns, self.tau_prod)[0])
+            a_prod = np.sqrt(_vp_params_at_t_diff(self._ns, self.t_diff_prod)[0])
             mean_hat[0, 0] = mean_hat[0, 0] + v_k[0, 0] * (self._h * L / a_prod)
 
         z_hat = torch.fft.rfftn(
@@ -701,22 +701,22 @@ class FixedQFFTGaussianAggregator(AggregationBase):
         )
         psi_hat = mean_hat + sv_k * z_hat
         psi_gpu = torch.fft.irfftn(psi_hat, s=(L, L), norm="ortho")
-        return psi_gpu.cpu().numpy(), {"method": "fixedq_fft_gpu", "tau": tau, "tau_prod": self.tau_prod}
+        return psi_gpu.cpu().numpy(), {"method": "fixedq_fft_gpu", "t_diff": t_diff, "t_diff_prod": self.t_diff_prod}
 
-    def aggregate(self, s_current, tau, **kwargs):
+    def aggregate(self, s_current, t_diff, **kwargs):
         if self._client is not None and self._device is not None and self._device.type != "cpu":
-            return self._fast_aggregate_gpu(s_current, tau)
+            return self._fast_aggregate_gpu(s_current, t_diff)
 
         server = kwargs["server"]
         transport = kwargs["transport"]
         seed = kwargs.get("seed", None)
 
-        xs = self.fetch_samples(s_current, tau, server, transport)
+        xs = self.fetch_samples(s_current, t_diff, server, transport)
         assert len(xs) == 1
         phi = np.asarray(list(xs.values())[0], dtype=np.float64)
         L = self.L
 
-        a2, s2 = _vp_params_at_tau(self._ns, tau)
+        a2, s2 = _vp_params_at_t_diff(self._ns, t_diff)
         a = np.sqrt(a2)
         if s2 < 1e-12:
             return (a * phi), {"method": "fixedq_fft", "degenerate": True}
@@ -730,53 +730,53 @@ class FixedQFFTGaussianAggregator(AggregationBase):
         mean_hat = v_k * (a * inv_s2) * phi_hat
 
         if self._h != 0.0:
-            a_prod = np.sqrt(_vp_params_at_tau(self._ns, self.tau_prod)[0])
+            a_prod = np.sqrt(_vp_params_at_t_diff(self._ns, self.t_diff_prod)[0])
             mean_hat[0, 0] = mean_hat[0, 0] + v_k[0, 0] * (self._h * L / a_prod)
 
         rng = np.random.default_rng(seed)
         z_hat = np.fft.rfftn(rng.standard_normal((L, L)), s=(L, L), norm="ortho")
         psi_hat = mean_hat + sv_k * z_hat
         psi = np.fft.irfftn(psi_hat, s=(L, L), norm="ortho").real
-        return psi, {"method": "fixedq_fft", "tau": tau, "tau_prod": self.tau_prod}
+        return psi, {"method": "fixedq_fft", "t_diff": t_diff, "t_diff_prod": self.t_diff_prod}
 
 
 class FixedQGaussianPBCContext(ContextBase):
-    r"""Gaussian PBC context with Q fixed at a reference τ.
+    r"""Gaussian PBC context with Q fixed at a reference t_diff.
 
     Used with :class:`FixedQFFTGaussianAggregator` for Replica Exchange,
-    where replicas at high τ would violate the feasibility condition with
-    the standard tau-dependent Q.
+    where replicas at high t_diff would violate the feasibility condition with
+    the standard t_diff-dependent Q.
     """
 
-    def __init__(self, J: float, L: int, noise_scheduler, *, tau_prod: float, h: float = 0.0):
+    def __init__(self, J: float, L: int, noise_scheduler, *, t_diff_prod: float, h: float = 0.0):
         self.J = float(J)
         self.L = int(L)
         self._ns = noise_scheduler
         self._lam = _laplacian_spectrum_rfft(L)
         self._rfft_weights = _rfft_last_axis_weights(L)
         self._h = float(h)
-        self.tau_prod = float(tau_prod)
-        a2, s2 = _vp_params_at_tau(noise_scheduler, tau_prod)
+        self.t_diff_prod = float(t_diff_prod)
+        a2, s2 = _vp_params_at_t_diff(noise_scheduler, t_diff_prod)
         self._q_prod = _precision_spectrum(self._lam, self.J, a2, s2)
 
-    def tempering_factor(self, tau):
+    def tempering_factor(self, t_diff):
         return 1.0
     
-    def log_prob(self, s, tau):
+    def log_prob(self, s, t_diff):
         s = np.asarray(s, dtype=np.float64)
         s_hat = np.fft.rfftn(s, s=(self.L, self.L), norm="ortho")
         result = float(-0.5 * np.sum(self._rfft_weights * self._q_prod * np.abs(s_hat) ** 2))
         if self._h != 0.0:
-            a_prod = np.sqrt(_vp_params_at_tau(self._ns, self.tau_prod)[0])
+            a_prod = np.sqrt(_vp_params_at_t_diff(self._ns, self.t_diff_prod)[0])
             result += float(self._h / a_prod * np.sum(s))
         return result
 
-    def grad_log_prob(self, s, tau):
+    def grad_log_prob(self, s, t_diff):
         s = np.asarray(s, dtype=np.float64)
         s_hat = np.fft.rfftn(s, s=(self.L, self.L), norm="ortho")
         grad = np.fft.irfftn(-self._q_prod * s_hat, s=(self.L, self.L), norm="ortho")
         if self._h != 0.0:
-            a_prod = np.sqrt(_vp_params_at_tau(self._ns, self.tau_prod)[0])
+            a_prod = np.sqrt(_vp_params_at_t_diff(self._ns, self.t_diff_prod)[0])
             grad = grad + self._h / a_prod
         return grad
 
@@ -789,10 +789,10 @@ class FixedQGaussianPBCContext(ContextBase):
 class LatticeRERunner:
     r"""Replica Exchange GG-PA runner for the lattice :math:`\phi^4` system.
 
-    Runs *R* replicas at a geometric ladder of diffusion times τ.
+    Runs *R* replicas at a geometric ladder of diffusion times t_diff.
     Uses **ragged-batch** GPU denoising (all active replicas in one GPU call
     per timestep) and batched FFT aggregation with **fixed** context
-    precision *Q* precomputed at ``tau_prod = tau_ladder[0]``.
+    precision *Q* precomputed at ``t_diff_prod = t_diff_ladder[0]``.
 
     Parameters
     ----------
@@ -802,8 +802,8 @@ class LatticeRERunner:
         Coupling constant.
     L : int
         Lattice side length.
-    tau_ladder : sequence of float
-        Ascending τ values; ``tau_ladder[0]`` is the production replica.
+    t_diff_ladder : sequence of float
+        Ascending diffusion-time values; ``t_diff_ladder[0]`` is the production replica.
     noise_scheduler : NoiseScheduler
         From ``diffusion_model.noise_scheduler``.
     h : float
@@ -816,7 +816,7 @@ class LatticeRERunner:
         diffusion_model,
         J: float,
         L: int,
-        tau_ladder,
+        t_diff_ladder,
         noise_scheduler,
         *,
         h: float = 0.0,
@@ -826,34 +826,34 @@ class LatticeRERunner:
         self.J = float(J)
         self.L = int(L)
         self.L2 = L * L
-        self.tau_ladder = list(tau_ladder)
-        self.n_rep = len(self.tau_ladder)
+        self.t_diff_ladder = list(t_diff_ladder)
+        self.n_rep = len(self.t_diff_ladder)
         self._ns = noise_scheduler
         self._h = float(h)
         self.device = device
         self.init_mode = str(init_mode)
 
         T_diff = noise_scheduler.num_timesteps
-        tau_prod = self.tau_ladder[0]
+        t_diff_prod = self.t_diff_ladder[0]
 
-        # Context precision Q fixed at tau_prod
+        # Context precision Q fixed at t_diff_prod
         lam = _laplacian_spectrum_rfft(L)
-        a2_p, s2_p = _vp_params_at_tau(noise_scheduler, tau_prod)
+        a2_p, s2_p = _vp_params_at_t_diff(noise_scheduler, t_diff_prod)
         self._alpha_prod = float(np.sqrt(a2_p))
         self._q_prod = _precision_spectrum(lam, self.J, a2_p, s2_p)
 
         # VP forward-kernel parameters per replica (for swap criterion)
         self._alpha = np.array(
-            [np.sqrt(_vp_params_at_tau(noise_scheduler, t)[0]) for t in self.tau_ladder]
+            [np.sqrt(_vp_params_at_t_diff(noise_scheduler, t)[0]) for t in self.t_diff_ladder]
         )
         self._inv_s2 = np.array(
-            [1.0 / _vp_params_at_tau(noise_scheduler, t)[1] for t in self.tau_ladder]
+            [1.0 / _vp_params_at_t_diff(noise_scheduler, t)[1] for t in self.t_diff_ladder]
         )
 
         # Ragged-batch structure: which replicas are active at each t_idx
         start_indices = [
             max(0, min(T_diff - 1, int(round(t * (T_diff - 1)))))
-            for t in self.tau_ladder
+            for t in self.t_diff_ladder
         ]
         self._max_start = max(start_indices)
         self._active_at = {

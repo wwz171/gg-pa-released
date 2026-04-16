@@ -1,4 +1,4 @@
-"""High-level drivers that wrap FixedTauKernel."""
+"""High-level drivers that wrap FixedDiffusionTimeKernel."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,23 +6,23 @@ from typing import Iterable, List, Tuple, Optional
 
 import numpy as np
 
-from ggpa.core.kernel import FixedTauKernel
+from ggpa.core.kernel import FixedDiffusionTimeKernel
 from ggpa.core.state import State
 from ggpa.core.errors import ConfigurationError, NotSupportedError
 from ggpa.utils.utils import rng_from_seed
 
 
 @dataclass
-class FixedTauSampler:
-    """Run a fixed-tau kernel for a number of steps.
+class FixedDiffusionTimeSampler:
+    """Run a fixed-diffusion-time kernel for a number of steps.
 
     Attributes:
-        kernel: The FixedTauKernel to use.
-        tau: The fixed diffusion time.
+        kernel: The FixedDiffusionTimeKernel to use.
+        t_diff: The fixed diffusion time.
     """
 
-    kernel: FixedTauKernel
-    tau: float
+    kernel: FixedDiffusionTimeKernel
+    t_diff: float
 
     def run(self, state: State, n_steps: int) -> Tuple[State, List]:
         """Run the sampler for n_steps iterations.
@@ -37,35 +37,35 @@ class FixedTauSampler:
         diagnostics = []
         current = state
         for _ in range(n_steps):
-            current, diag = self.kernel.step(current, self.tau)
+            current, diag = self.kernel.step(current, self.t_diff)
             diagnostics.append(diag)
         return current, diagnostics
 
 
 @dataclass
 class AnnealingDriver:
-    """Run a kernel with a provided tau schedule.
+    """Run a kernel with a provided t_diff schedule.
 
     Attributes:
-        kernel: The FixedTauKernel to use.
+        kernel: The FixedDiffusionTimeKernel to use.
     """
 
-    kernel: FixedTauKernel
+    kernel: FixedDiffusionTimeKernel
 
     def run(self, state: State, schedule: Iterable[float]) -> Tuple[State, List]:
         """Run the kernel with an annealing schedule.
 
         Args:
             state: Initial state.
-            schedule: Iterable of tau values (e.g., from linear_schedule).
+            schedule: Iterable of t_diff values (e.g., from linear_schedule).
 
         Returns:
             Tuple of (final_state, list_of_diagnostics).
         """
         diagnostics = []
         current = state
-        for tau in schedule:
-            current, diag = self.kernel.step(current, float(tau))
+        for t_diff in schedule:
+            current, diag = self.kernel.step(current, float(t_diff))
             diagnostics.append(diag)
         return current, diagnostics
 
@@ -83,15 +83,15 @@ class ReplicaExchangeDriver:
     - ``ggpa.systems.alanine_dipeptide.AlanineReplicaExchange``
 
     Attributes:
-        kernel: The FixedTauKernel shared by all replicas.
-        taus: List of tau values, one per replica (ascending order recommended).
+        kernel: The FixedDiffusionTimeKernel shared by all replicas.
+        t_diffs: List of t_diff values, one per replica (ascending order recommended).
         swap_interval: Attempt swaps every this many blocks.
         master_seed: Optional seed for reproducible swap decisions.
         rng: NumPy random generator (created from master_seed if None).
     """
 
-    kernel: FixedTauKernel
-    taus: List[float]
+    kernel: FixedDiffusionTimeKernel
+    t_diffs: List[float]
     swap_interval: int = 5
     master_seed: Optional[int] = None
     rng: Optional[np.random.Generator] = None
@@ -108,7 +108,7 @@ class ReplicaExchangeDriver:
             Tuple of (final_states, swap_diagnostics).
 
         Raises:
-            ConfigurationError: If len(states) != len(taus).
+            ConfigurationError: If len(states) != len(t_diffs).
         """
         raise NotSupportedError(
             "ReplicaExchangeDriver is experimental and disabled in the public release. "
@@ -130,15 +130,15 @@ class ReplicaExchangeDriver:
         """
         swap_attempts = []
         for i in range(len(states) - 1):
-            tau_i = self.taus[i]
-            tau_j = self.taus[i + 1]
+            t_diff_i = self.t_diffs[i]
+            t_diff_j = self.t_diffs[i + 1]
             state_i = states[i]
             state_j = states[i + 1]
 
-            u_i_i = self.kernel.reduced_potential(state_i, tau_i).u_tau
-            u_i_j = self.kernel.reduced_potential(state_j, tau_i).u_tau
-            u_j_i = self.kernel.reduced_potential(state_i, tau_j).u_tau
-            u_j_j = self.kernel.reduced_potential(state_j, tau_j).u_tau
+            u_i_i = self.kernel.reduced_potential(state_i, t_diff_i).u_t_diff
+            u_i_j = self.kernel.reduced_potential(state_j, t_diff_i).u_t_diff
+            u_j_i = self.kernel.reduced_potential(state_i, t_diff_j).u_t_diff
+            u_j_j = self.kernel.reduced_potential(state_j, t_diff_j).u_t_diff
 
             log_alpha = -(u_i_j + u_j_i) + (u_i_i + u_j_j)
             accept = log_alpha >= 0.0

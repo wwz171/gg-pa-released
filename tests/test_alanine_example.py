@@ -51,12 +51,12 @@ def test_alanine_public_config_defaults():
 
     cfg = _yaml.safe_load(Path("configs/alanine_dipeptide_example.yaml").read_text())
     assert cfg["shared"]["checkpoint"] == "checkpoints/ad_torsion_prior.pt"
-    assert cfg["ad_sodium"]["tau"] == pytest.approx(0.1)
+    assert cfg["ad_sodium"]["t_diff"] == pytest.approx(0.1)
     assert cfg["ad_sodium"]["n_steps"] == 5000
     assert cfg["ad_sodium"]["save_dcd"] is True
     assert cfg["ad_sodium_ensemble"]["n_trajectories"] == 5
     assert cfg["ad_sodium_ensemble"]["burnin_fraction"] == pytest.approx(0.2)
-    assert cfg["ad_dimer"]["tau_list"] == pytest.approx([0.1, 0.15, 0.25, 0.4])
+    assert cfg["ad_dimer"]["t_diff_list"] == pytest.approx([0.1, 0.15, 0.25, 0.4])
     assert cfg["ad_dimer"]["n_blocks"] == 1000
     assert cfg["ad_dimer"]["burnin_fraction"] == pytest.approx(0.2)
     assert cfg["ad_dimer"]["save_dcd"] is True

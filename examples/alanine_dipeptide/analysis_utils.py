@@ -324,7 +324,7 @@ def load_ad_sodium_result(result_path: str | Path) -> Dict[str, np.ndarray]:
         "oo_distance_nm": np.asarray(payload["oo_distance_nm"], dtype=np.float64),
         "oxygen_pair": np.asarray(payload["oxygen_pair"], dtype=np.int64),
         "final_positions_nm": np.asarray(payload["final_positions_nm"], dtype=np.float64),
-        "tau": float(payload["tau"]),
+        "t_diff": float(payload["t_diff"]),
         "wall_time_s": float(payload["wall_time_s"]),
     }
 
@@ -341,7 +341,7 @@ def load_ad_dimer_result(result_path: str | Path) -> Dict[str, np.ndarray]:
         "analysis_hbond_counts": np.asarray(payload["analysis_hbond_counts"], dtype=np.float64),
         "analysis_reciprocal_counts": np.asarray(payload["analysis_reciprocal_counts"], dtype=np.float64),
         "wall_time_s": float(payload["wall_time_s"]),
-        "taus": np.asarray(payload["taus"], dtype=np.float64),
+        "t_diffs": np.asarray(payload["t_diffs"], dtype=np.float64),
     }
 
 

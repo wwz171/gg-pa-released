@@ -1,4 +1,4 @@
-"""Stable fixed-tau kernel implementation."""
+"""Stable fixed-diffusion-time kernel implementation."""
 from __future__ import annotations
 
 import logging as _logging
@@ -18,7 +18,7 @@ logger = get_logger("kernel")
 
 
 def _fmt_u(u):
-    """Format u_tau for logging – works for scalar, array, or tensor."""
+    """Format u_t_diff for logging – works for scalar, array, or tensor."""
     try:
         return f"{float(u):.4f}"
     except (TypeError, ValueError):
@@ -28,10 +28,10 @@ def _fmt_u(u):
 
 
 @dataclass
-class FixedTauKernel:
+class FixedDiffusionTimeKernel:
     """Stable core of GG-PA. DO NOT MODIFY once frozen.
     
-    This kernel implements the fixed-tau GG-PA Gibbs iteration:
+    This kernel implements the fixed-diffusion-time GG-PA Gibbs iteration:
     1. Create requests with projected signal for all clients
     2. Collect denoised samples from clients via Request/Reply
     3. Aggregate samples into new signal state
@@ -52,10 +52,10 @@ class FixedTauKernel:
     def step(
         self,
         state: State,
-        tau: float,
+        t_diff: float,
         compute_reduced_potential: bool = True,
     ) -> Tuple[State, StepDiagnostics]:
-        """Perform one GG-PA Gibbs iteration at fixed tau.
+        """Perform one GG-PA Gibbs iteration at fixed t_diff.
         
         Process:
         1. Delegate to aggregator to sample new signal
@@ -65,9 +65,9 @@ class FixedTauKernel:
         
         Args:
             state: Current GG-PA state (contains s, step, cache)
-            tau: Diffusion time in [0, 1]
+            t_diff: Diffusion time in [0, 1]
             compute_reduced_potential: If True (default), compute reduced
-                potential U_τ for diagnostics.  Set to False in tight
+                potential U_t_diff for diagnostics.  Set to False in tight
                 sampling loops (e.g. J scans) for ~2× speedup.
             
         Returns:
@@ -77,7 +77,7 @@ class FixedTauKernel:
         _log_debug = logger.isEnabledFor(_logging.DEBUG)
         
         if _log_info:
-            logger.info(f"Step {state.step}: Starting GG-PA iteration with tau={tau:.4f}")
+            logger.info(f"Step {state.step}: Starting GG-PA iteration with t_diff={t_diff:.4f}")
         t0 = time.time()
         
         # --- Aggregate: aggregator fetches what it needs on-demand ---
@@ -85,7 +85,7 @@ class FixedTauKernel:
             logger.debug(f"Aggregating with method={self.server.aggregator.__class__.__name__}")
         s_new, agg_diag = self.server.aggregate(
             s_current=state.s,
-            tau=tau,
+            t_diff=t_diff,
             server=self.server,
             transport=self.transport,
             context=self.server.context,
@@ -96,9 +96,9 @@ class FixedTauKernel:
         # --- Optional reduced potential (skip for speed) ---
         reduced = None
         if compute_reduced_potential:
-            reduced = self.server.reduced_potential(s_new, tau)
+            reduced = self.server.reduced_potential(s_new, t_diff)
             if _log_debug:
-                logger.debug(f"Reduced potential: u_tau={_fmt_u(reduced.u_tau)}")
+                logger.debug(f"Reduced potential: u_t_diff={_fmt_u(reduced.u_t_diff)}")
         
         # --- New state ---
         new_state = State(s=s_new, step=state.step + 1, cache=dict(state.cache))
@@ -117,16 +117,16 @@ class FixedTauKernel:
         wall_time = time.time() - t0
         
         if _log_info:
-            u_str = _fmt_u(reduced.u_tau) if reduced is not None else "skip"
+            u_str = _fmt_u(reduced.u_t_diff) if reduced is not None else "skip"
             norm_str = f", ||s||={signal_norm:.4f}" if signal_norm is not None else ""
             logger.info(
-                f"Step {state.step}: Complete - tau={tau:.4f}{norm_str}, "
-                f"u_tau={u_str}, time={wall_time:.3f}s"
+                f"Step {state.step}: Complete - t_diff={t_diff:.4f}{norm_str}, "
+                f"u_t_diff={u_str}, time={wall_time:.3f}s"
             )
         
         diagnostics = StepDiagnostics(
             step=state.step,
-            tau=tau,
+            t_diff=t_diff,
             reduced_potential=reduced,
             aggregate_diagnostics=agg_diag,
             wall_time_s=wall_time,
@@ -134,22 +134,22 @@ class FixedTauKernel:
         )
         return new_state, diagnostics
 
-    def reduced_potential(self, state: State, tau: float):
-        """Compute reduced potential at arbitrary tau.
+    def reduced_potential(self, state: State, t_diff: float):
+        """Compute reduced potential at arbitrary t_diff.
         
         NOTE: Server fetches samples on-demand internally.
         This ensures the method works with lightweight State objects.
         
         Args:
             state: Current GG-PA state
-            tau: Diffusion time in [0, 1]
+            t_diff: Diffusion time in [0, 1]
             
         Returns:
             ReducedPotential object with energy components
         """
-        logger.debug(f"Computing reduced potential at tau={tau:.4f}")
-        reduced = self.server.reduced_potential(state.s, tau)
-        logger.debug(f"Reduced potential computed: u_tau={_fmt_u(reduced.u_tau)}")
+        logger.debug(f"Computing reduced potential at t_diff={t_diff:.4f}")
+        reduced = self.server.reduced_potential(state.s, t_diff)
+        logger.debug(f"Reduced potential computed: u_t_diff={_fmt_u(reduced.u_t_diff)}")
         return reduced
 
     @classmethod
@@ -159,8 +159,8 @@ class FixedTauKernel:
         aggregator: AggregationBase,
         context: Optional[ContextBase] = None,
         master_seed: Optional[int] = None,
-    ) -> "FixedTauKernel":
-        """Create FixedTauKernel from Client instances.
+    ) -> "FixedDiffusionTimeKernel":
+        """Create FixedDiffusionTimeKernel from Client instances.
         
         Automatically creates CentralServer and registers clients.
         
@@ -169,7 +169,7 @@ class FixedTauKernel:
             ...     "dog": MyClient(dog_model),
             ...     "cat": MyClient(cat_model),
             ... }
-            >>> kernel = FixedTauKernel.from_clients(
+            >>> kernel = FixedDiffusionTimeKernel.from_clients(
             ...     clients=clients,
             ...     aggregator=GradientMCMCAggregator(),
             ...     context=UniformContext(),
@@ -183,13 +183,13 @@ class FixedTauKernel:
             master_seed: Random seed for reproducibility
             
         Returns:
-            FixedTauKernel ready to use
+            FixedDiffusionTimeKernel ready to use
         """
         from ggpa.server.context import UniformContext
         from ggpa.server.server import CentralServer
         from ggpa.transport.local import LocalTransport
         
-        logger.info("Creating FixedTauKernel from client instances")
+        logger.info("Creating FixedDiffusionTimeKernel from client instances")
         
         if context is None:
             context = UniformContext()
@@ -212,7 +212,7 @@ class FixedTauKernel:
         
         # Summary
         logger.info(
-            f"FixedTauKernel initialized: {len(clients)} clients, "
+            f"FixedDiffusionTimeKernel initialized: {len(clients)} clients, "
             f"context={type(context).__name__}, aggregator={type(aggregator).__name__}"
         )
         

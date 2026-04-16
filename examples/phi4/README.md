@@ -12,10 +12,11 @@ Main entry points:
   - `critical-scaling`: plot the data-collapse figure from `cs_h..._g....npz` or `critical_scaling_summary.npz`
   - `all`: produce both figures
 - `run_phase_transition.sh`
-  - launch the zero-field scan in the background with `conda run -n pyg`
+  - launch the zero-field scan in the background
 - `run_critical_scaling.sh`
-  - launch the critical-scaling scan in the background with `conda run -n pyg`
+  - launch the critical-scaling scan in the background
   - both shell launchers forward any extra CLI flags to `phi4_re_scan.py`, e.g. `--compile-model`
+  - both shell launchers use the current shell environment by default; set `GGPA_CONDA_ENV=<env>` to force `conda run -n <env>`
 
 Default parameters live in `configs/phi4_example.yaml`.
 

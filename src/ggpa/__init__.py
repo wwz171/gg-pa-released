@@ -8,9 +8,9 @@ from ggpa.client.projectors.identity import IdentityProjector
 from ggpa.client.projectors.linear import LinearProjector
 from ggpa.client.projectors.mask import MaskProjector
 from ggpa.core.diagnostics import ReducedPotential
-from ggpa.core.kernel import FixedTauKernel
+from ggpa.core.kernel import FixedDiffusionTimeKernel
 from ggpa.core.state import State, StepDiagnostics
-from ggpa.drivers.base import AnnealingDriver, FixedTauSampler, ReplicaExchangeDriver
+from ggpa.drivers.base import AnnealingDriver, FixedDiffusionTimeSampler, ReplicaExchangeDriver
 from ggpa.server.aggregation import GradientMCMCAggregator, RandomWalkMCMCAggregator
 from ggpa.server.base import ServerBase, AggregationBase, ContextBase
 from ggpa.server.context import UniformContext
@@ -37,7 +37,7 @@ __all__ = [
     "RandomWalkMCMCAggregator",
     "UniformContext",
     "CentralServer",
-    "FixedTauKernel",
+    "FixedDiffusionTimeKernel",
     "ReducedPotential",
     "StepDiagnostics",
     "State",
@@ -49,7 +49,7 @@ __all__ = [
     "LocalTransport",
     "RPCTransport",
     "AnnealingDriver",
-    "FixedTauSampler",
+    "FixedDiffusionTimeSampler",
     "ReplicaExchangeDriver",
     "mbar_weights",
     "MBARResult",

@@ -18,10 +18,10 @@ class CentralServer(ServerBase):
     
     This is just a thin wrapper around ServerBase for convenience.
     ServerBase already provides all functionality:
-    - create_requests(s, tau, request_types, step)
-    - aggregate(s_current, tau, **kwargs)
-    - compute_gradient(s, tau)
-    - reduced_potential(s, tau)
+    - create_requests(s, t_diff, request_types, step)
+    - aggregate(s_current, t_diff, **kwargs)
+    - compute_gradient(s, t_diff)
+    - reduced_potential(s, t_diff)
     - query_client_properties(property_names)
     - register_clients(clients, transport)
     
@@ -43,9 +43,9 @@ class CentralServer(ServerBase):
         >>> server.register_clients(clients, transport)
         >>> 
         >>> # All methods now work automatically!
-        >>> gradient = server.compute_gradient(s, tau)
-        >>> u_tau = server.reduced_potential(s, tau)
-        >>> s_new, diagnostics = server.aggregate(s, tau, seed=42, step=0)
+        >>> gradient = server.compute_gradient(s, t_diff)
+        >>> u_t_diff = server.reduced_potential(s, t_diff)
+        >>> s_new, diagnostics = server.aggregate(s, t_diff, seed=42, step=0)
     """
     
     context: ContextBase

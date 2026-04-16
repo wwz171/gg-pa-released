@@ -7,21 +7,21 @@ from typing import Dict, Any
 
 @dataclass
 class ReducedPotential:
-    """Reduced potential terms for a given tau.
+    """Reduced potential terms for a given t_diff.
 
     Attributes:
-        tau: Diffusion time.
+        t_diff: Diffusion time.
         log_q_ctx: Context term (possibly unnormalized).
         log_q_fwd: Per-client forward log-likelihoods.
         total_log_q: Sum of all log terms.
-        u_tau: Reduced potential = -total_log_q.
+        u_t_diff: Reduced potential = -total_log_q.
     """
 
-    tau: float
+    t_diff: float
     log_q_ctx: float
     log_q_fwd: Dict[str, float]
     total_log_q: float
-    u_tau: float
+    u_t_diff: float
 
 
 __all__ = ["ReducedPotential"]

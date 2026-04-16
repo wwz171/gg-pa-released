@@ -19,7 +19,7 @@ ad_sodium:
   temperature: 300.0
   friction: 1.0
   timestep: 0.001
-  tau: 0.1
+  t_diff: 0.1
   md_steps: 100
   n_steps: 5000
   record_interval: 1
@@ -48,7 +48,7 @@ ad_dimer:
   temperature: 300.0
   friction: 1.0
   timestep: 0.002
-  tau_list:
+  t_diff_list:
     - 0.1
     - 0.15
     - 0.25

@@ -5,7 +5,7 @@ This module provides built-in aggregation strategies:
 - RandomWalkMCMCAggregator: Random-walk MCMC (fallback without gradients)
 
 KEY DESIGN:
-- Signature: aggregate(s_current, tau, **kwargs) - NO xs parameter
+- Signature: aggregate(s_current, t_diff, **kwargs) - NO xs parameter
 - Samples fetched on-demand via Request/Reply pattern
 - Base class AggregationBase is in server.base module
 """
@@ -30,7 +30,7 @@ class GradientMCMCAggregator(AggregationBase):
     
     Uses unadjusted Langevin algorithm (ULA):
         s_(t+1) = s_t + η ∇ log π(s_t) + √(2η) ε_t
-    where ∇ log π(s) = ∇ log_prob(s, τ) + Σ_i ∇_s log p(Φ_i(s))
+    where ∇ log π(s) = ∇ log_prob(s, t_diff) + Σ_i ∇_s log p(Φ_i(s))
     
     Requirements:
         - context.grad_log_prob() must be available
@@ -45,11 +45,11 @@ class GradientMCMCAggregator(AggregationBase):
     def aggregate(
         self,
         s_current: Any,
-        tau: float,
+        t_diff: float,
         **kwargs
     ) -> Tuple[Any, Dict[str, Any]]:
         """Gradient-based MCMC aggregation."""
-        logger.info(f"GradientMCMC aggregation: tau={tau:.4f}, n_steps={self.n_steps}, step_size={self.step_size}")
+        logger.info(f"GradientMCMC aggregation: t_diff={t_diff:.4f}, n_steps={self.n_steps}, step_size={self.step_size}")
         
         # Extract what we need from kwargs
         server = kwargs['server']
@@ -63,9 +63,9 @@ class GradientMCMCAggregator(AggregationBase):
         logger.debug(f"Starting Langevin dynamics")
 
         def compute_grad_log_target(s_val: np.ndarray) -> np.ndarray:
-            """Compute ∇_s log π(s | {x_i}, τ)."""
+            """Compute ∇_s log π(s | {x_i}, t_diff)."""
             # Context gradient
-            grad_ctx = context.grad_log_prob(s_val, tau)
+            grad_ctx = context.grad_log_prob(s_val, t_diff)
             if grad_ctx is None:
                 logger.error("Context does not support grad_log_prob()")
                 raise NotSupportedError(
@@ -78,7 +78,7 @@ class GradientMCMCAggregator(AggregationBase):
             # 1. Creates requests ['sample', 'gradient']
             # 2. Clients handle projection, denoising, gradient computation
             # 3. Returns dict {client_id: grad_s}
-            client_grads = server.compute_gradient(s_val, tau)
+            client_grads = server.compute_gradient(s_val, t_diff)
             for grad in client_grads.values():
                 grad_total += np.asarray(grad)
             
@@ -121,11 +121,11 @@ class RandomWalkMCMCAggregator(AggregationBase):
     def aggregate(
         self,
         s_current: Any,
-        tau: float,
+        t_diff: float,
         **kwargs
     ) -> Tuple[Any, Dict[str, Any]]:
         """Random-walk MCMC aggregation."""
-        logger.info(f"RandomWalkMCMC aggregation: tau={tau:.4f}, n_steps={self.n_steps}, step_size={self.step_size}")
+        logger.info(f"RandomWalkMCMC aggregation: t_diff={t_diff:.4f}, n_steps={self.n_steps}, step_size={self.step_size}")
         
         # Extract what we need from kwargs
         server = kwargs['server']
@@ -137,16 +137,16 @@ class RandomWalkMCMCAggregator(AggregationBase):
         s = np.asarray(s_current).copy()
 
         def log_target(s_val: np.ndarray) -> float:
-            """Compute log π(s | {x_i}, τ)."""
+            """Compute log π(s | {x_i}, t_diff)."""
             # Context term
-            log_q_ctx = context.log_q_ctx(s_val, tau)
+            log_q_ctx = context.log_q_ctx(s_val, t_diff)
             
             # Client log likelihood terms via AggregationBase helper
             # This automatically:
             # 1. Creates requests ['sample', 'log_prob']
             # 2. Clients handle projection, denoising, log_prob computation
             # 3. Returns dict {client_id: log_prob}
-            log_probs = self.fetch_log_probs(s_val, tau, server, transport)
+            log_probs = self.fetch_log_probs(s_val, t_diff, server, transport)
             
             # Sum all contributions
             total = log_q_ctx + sum(log_probs.values())

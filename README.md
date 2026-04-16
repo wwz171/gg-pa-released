@@ -60,7 +60,7 @@ bash examples/phi4/run_critical_scaling.sh
 python examples/phi4/plot_phi4_results.py all
 ```
 
-The two shell scripts launch the zero-field phase-transition scan and the nonzero-field critical-scaling scan in the background with `conda run -n pyg`. Both workflows use the shared YAML config at `configs/phi4_example.yaml`, and raw outputs are written under `examples/phi4/results/`. The plotting script then loads those raw files and produces the phase-transition and data-collapse figures.
+The two shell scripts launch the zero-field phase-transition scan and the nonzero-field critical-scaling scan in the background. Both workflows use the shared YAML config at `configs/phi4_example.yaml`, and raw outputs are written under `examples/phi4/results/`. The plotting script then loads those raw files and produces the phase-transition and data-collapse figures. The shell launchers use the current shell environment by default; set `GGPA_CONDA_ENV=<env>` to force `conda run -n <env>`.
 
 The script defaults match the SI description for the paper-facing phi4 runs:
 `10_000` sweeps per point, magnetization recorded every sweep, `30%` burn-in,

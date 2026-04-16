@@ -20,7 +20,7 @@ Usage:
     from ggpa.core.logging import get_logger
     
     logger = get_logger("kernel")  # Creates "ggpa.kernel" logger
-    logger.info("Step 0: tau=0.5, ||s||=3.14")
+    logger.info("Step 0: t_diff=0.5, ||s||=3.14")
     logger.debug(f"State details: s.shape={s.shape}, s.mean={s.mean()}")
 """
 from __future__ import annotations

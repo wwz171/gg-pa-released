@@ -50,10 +50,10 @@ class State:
 
 @dataclass
 class StepDiagnostics:
-    """Diagnostics for a single fixed-tau step."""
+    """Diagnostics for a single fixed-diffusion-time step."""
 
     step: int
-    tau: float
+    t_diff: float
     reduced_potential: Optional[ReducedPotential] = None
     client_diagnostics: Dict[str, Any] = field(default_factory=dict)
     aggregate_diagnostics: Dict[str, Any] = field(default_factory=dict)

@@ -41,7 +41,7 @@ class Client(Protocol):
         """Process a client request and return a reply.
         
         Args:
-            request: ClientRequest with s, tau, request_types
+            request: ClientRequest with s, t_diff, request_types
             
         Returns:
             ClientReply with status_code, error (if any), and data dict
@@ -59,7 +59,7 @@ class Server(Protocol):
     2. aggregate(): Combine samples into new s (fetches on-demand)
     3. compute_gradient(): Compute ∇_s log p(Φ(s)) via chain rule
     4. query_client_properties(): Query client metadata
-    5. reduced_potential(): Calculate U_τ(s, {x_i})
+    5. reduced_potential(): Calculate U_t_diff(s, {x_i})
     """
 
     context: Any  # ContextBase
@@ -68,7 +68,7 @@ class Server(Protocol):
     def create_requests(
         self,
         s: Any,
-        tau: float,
+        t_diff: float,
         request_types: Union[str, List[str]],
         step: Optional[int] = None
     ) -> Dict[str, ClientRequest]:
@@ -76,7 +76,7 @@ class Server(Protocol):
         
         Args:
             s: Current shared state
-            tau: Diffusion time parameter
+            t_diff: Diffusion time parameter
             request_types: What to request ('sample', 'gradient', 'log_prob', etc.)
             step: Current iteration number (for seeding)
             
@@ -87,14 +87,14 @@ class Server(Protocol):
     def aggregate(
         self,
         s_current: Any,
-        tau: float,
+        t_diff: float,
         **kwargs
     ) -> Tuple[Any, Dict[str, Any]]:
         """Aggregate client samples into new shared state.
                 
         Args:
             s_current: Current shared state
-            tau: Diffusion time parameter
+            t_diff: Diffusion time parameter
             **kwargs: Additional context (seed, step, server, transport, etc.)
             
         Returns:
@@ -104,7 +104,7 @@ class Server(Protocol):
     def compute_gradient(
         self,
         s: Any,
-        tau: float
+        t_diff: float
     ) -> Dict[str, Any]:
         """Compute ∇_s log p(Φ_i(s)) for all clients.
         
@@ -112,7 +112,7 @@ class Server(Protocol):
         
         Args:
             s: Current shared state
-            tau: Diffusion time parameter
+            t_diff: Diffusion time parameter
             
         Returns:
             Dictionary mapping client_id to gradient arrays
@@ -134,16 +134,16 @@ class Server(Protocol):
     def reduced_potential(
         self,
         s: Any,
-        tau: float
+        t_diff: float
     ) -> 'ReducedPotential':
-        """Compute reduced potential U_τ(s, {x_i}).
+        """Compute reduced potential U_t_diff(s, {x_i}).
         
         The reduced potential combines context and likelihood terms:
-        U_τ(s, {x_i}) = -log π(s)^β(τ) - Σ_i log q_τ(y_i | x_i)
+        U_t_diff(s, {x_i}) = -log π(s)^β(t_diff) - Σ_i log q_t_diff(y_i | x_i)
         
         Args:
             s: Current shared state
-            tau: Diffusion time parameter
+            t_diff: Diffusion time parameter
             
         Returns:
             ReducedPotential object

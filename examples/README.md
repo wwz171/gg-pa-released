@@ -7,7 +7,7 @@ Current public entry points:
 - `phi4/`
   - `phi4_re_scan.py`: reproducible replica-exchange GG-PA scans for the 2D phi4 lattice.
   - `plot_phi4_results.py`: plotting utilities that load the saved raw files and produce the phase-transition and data-collapse figures.
-  - `run_phase_transition.sh` / `run_critical_scaling.sh`: background launchers that use `conda run -n pyg`.
+  - `run_phase_transition.sh` / `run_critical_scaling.sh`: background launchers that use the current shell environment by default, or `GGPA_CONDA_ENV=<env>` when you want `conda run`.
   - `README.md`: folder-local usage notes.
 
 - `alanine_dipeptide/`

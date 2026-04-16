@@ -153,7 +153,7 @@ def build_scaling_window_gamma_grid(
     return np.linspace(gamma_lo, gamma_hi, int(n_gamma), dtype=np.float64)
 
 
-def build_t_ladder(t_prod: float, t_max: float, n_replicas: int) -> np.ndarray:
+def build_t_diff_ladder(t_prod: float, t_max: float, n_replicas: int) -> np.ndarray:
     return np.geomspace(float(t_prod), float(t_max), int(n_replicas), dtype=np.float64)
 
 
@@ -274,14 +274,14 @@ def make_runner(
     J: float,
     h: float,
     L: int,
-    t_ladder: np.ndarray,
+    t_diff_ladder: np.ndarray,
     device: torch.device,
 ) -> LatticeRERunner:
     return LatticeRERunner(
         diffusion_model=diffusion,
         J=float(J),
         L=int(L),
-        tau_ladder=t_ladder,
+        t_diff_ladder=t_diff_ladder,
         noise_scheduler=diffusion.noise_scheduler,
         h=float(h),
         device=device,
@@ -295,7 +295,7 @@ def run_single_point(
     J: float,
     h: float,
     L: int,
-    t_ladder: np.ndarray,
+    t_diff_ladder: np.ndarray,
     n_sweeps: int,
     record_interval: int,
     burnin_fraction: float,
@@ -310,7 +310,7 @@ def run_single_point(
         J=J,
         h=h,
         L=L,
-        t_ladder=t_ladder,
+        t_diff_ladder=t_diff_ladder,
         device=device,
     )
     result = runner.run_sweeps(
@@ -342,7 +342,7 @@ def run_single_point(
         "J": float(J),
         "h": float(h),
         "L": int(L),
-        "n_replicas": int(len(t_ladder)),
+        "n_replicas": int(len(t_diff_ladder)),
         "n_sweeps": int(n_sweeps),
         "record_interval": int(record_interval),
         "burnin_fraction": float(burnin_fraction),
@@ -350,7 +350,7 @@ def run_single_point(
         "n_burnin": int(burn_idx),
         "n_meas": int(len(prod_meas)),
         "seed": int(seed),
-        "t_ladder": np.asarray(t_ladder, dtype=np.float64),
+        "t_diff_ladder": np.asarray(t_diff_ladder, dtype=np.float64),
         "mean_swap_rate": mean_swap_rate,
         "swap_rates": pair_rates.astype(np.float64),
         "wall_time": float(result["wall_time"]),
@@ -399,7 +399,7 @@ def save_critical_point(result: dict[str, Any], output_dir: Path, *, prefix: str
 
     save_dict: dict[str, np.ndarray] = {
         "metadata": np.array(json.dumps(metadata)),
-        "t_ladder": np.asarray(result["t_ladder"], dtype=np.float64),
+        "t_diff_ladder": np.asarray(result["t_diff_ladder"], dtype=np.float64),
         "swap_rates": np.asarray(result["swap_rates"], dtype=np.float64),
         "phi_final": np.asarray(result["phi_final"], dtype=np.float32),
         "psi_final": np.asarray(result["psi_final"], dtype=np.float32),
@@ -459,7 +459,7 @@ def save_phase_transition_scan(
     n_burnin_by_gamma = np.array([r["n_burnin"] for r in results], dtype=np.int64)
     n_meas_by_gamma = np.array([r["n_meas"] for r in results], dtype=np.int64)
     n_eff = np.array([r["n_eff"] for r in results], dtype=np.float64)
-    t_ladder = np.asarray(results[0]["t_ladder"], dtype=np.float64)
+    t_diff_ladder = np.asarray(results[0]["t_diff_ladder"], dtype=np.float64)
     magnetization_series = _pad_first_axis(
         [np.asarray(r["mag_replica_0"], dtype=np.float32) for r in results],
         dtype=np.float32,
@@ -511,7 +511,7 @@ def save_phase_transition_scan(
         n_burnin_by_gamma=n_burnin_by_gamma,
         n_meas_by_gamma=n_meas_by_gamma,
         n_eff=n_eff,
-        t_ladder=t_ladder,
+        t_diff_ladder=t_diff_ladder,
         model_tag=np.array(checkpoint.stem),
         n_params=np.array(int(n_params)),
         magnetization_series=magnetization_series,
@@ -603,7 +603,7 @@ def save_phase_transition_point(
 
     save_dict: dict[str, np.ndarray] = {
         "metadata": np.array(json.dumps(metadata)),
-        "t_ladder": np.asarray(result["t_ladder"], dtype=np.float64),
+        "t_diff_ladder": np.asarray(result["t_diff_ladder"], dtype=np.float64),
         "swap_rates": np.asarray(result["swap_rates"], dtype=np.float64),
         "acf": np.asarray(result["acf"], dtype=np.float64),
         "phi_final": np.asarray(result["phi_final"], dtype=np.float32),
@@ -828,7 +828,7 @@ def run_phase_transition(args: argparse.Namespace) -> int:
     output_dir = Path(phase_cfg["output_dir"])
     checkpoint = Path(cfg["model"]["checkpoint"])
     device = _device_from_string(str(runtime["device"]))
-    t_ladder = build_t_ladder(
+    t_diff_ladder = build_t_diff_ladder(
         diffusion_cfg["t_prod"],
         diffusion_cfg["t_max"],
         diffusion_cfg["n_replicas"],
@@ -845,7 +845,7 @@ def run_phase_transition(args: argparse.Namespace) -> int:
             "n_sweeps_default": int(phase_cfg["n_sweeps"]),
             "critical_window": phase_cfg.get("critical_window"),
             "record_interval": int(phase_cfg["record_interval"]),
-            "t_ladder": t_ladder.tolist(),
+            "t_diff_ladder": t_diff_ladder.tolist(),
         }
         print(json.dumps(payload, indent=2))
         return 0
@@ -885,7 +885,7 @@ def run_phase_transition(args: argparse.Namespace) -> int:
             J=float(J),
             h=float(phase_cfg["h"]),
             L=int(phase_cfg["L"]),
-            t_ladder=t_ladder,
+            t_diff_ladder=t_diff_ladder,
             n_sweeps=point_sweeps,
             record_interval=int(phase_cfg["record_interval"]),
             burnin_fraction=float(phase_cfg["burnin_fraction"]),
@@ -939,7 +939,7 @@ def run_critical_scaling(args: argparse.Namespace) -> int:
     output_dir = Path(critical_cfg["output_dir"])
     checkpoint = Path(cfg["model"]["checkpoint"])
     device = _device_from_string(str(runtime["device"]))
-    t_ladder = build_t_ladder(
+    t_diff_ladder = build_t_diff_ladder(
         diffusion_cfg["t_prod"],
         diffusion_cfg["t_max"],
         diffusion_cfg["n_replicas"],
@@ -954,7 +954,7 @@ def run_critical_scaling(args: argparse.Namespace) -> int:
             "h_values": list(critical_cfg["h_values"]),
             "n_sweeps": int(critical_cfg["n_sweeps"]),
             "record_interval": int(critical_cfg["record_interval"]),
-            "t_ladder": t_ladder.tolist(),
+            "t_diff_ladder": t_diff_ladder.tolist(),
         }
         print(json.dumps(payload, indent=2))
         return 0
@@ -996,7 +996,7 @@ def run_critical_scaling(args: argparse.Namespace) -> int:
                 J=float(J),
                 h=float(h),
                 L=int(critical_cfg["L"]),
-                t_ladder=t_ladder,
+                t_diff_ladder=t_diff_ladder,
                 n_sweeps=int(critical_cfg["n_sweeps"]),
                 record_interval=int(critical_cfg["record_interval"]),
                 burnin_fraction=float(critical_cfg["burnin_fraction"]),

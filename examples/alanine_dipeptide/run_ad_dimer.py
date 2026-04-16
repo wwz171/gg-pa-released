@@ -96,11 +96,11 @@ def run_ad_dimer_once(
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    tau_list = [float(tau) for tau in section["tau_list"]]
-    n_replicas = len(tau_list)
+    t_diff_list = [float(t_diff) for t_diff in section["t_diff_list"]]
+    n_replicas = len(t_diff_list)
     print(
         "Running alanine dipeptide dimer RE example "
-        f"(replicas={n_replicas}, taus={tau_list}, blocks={section['n_blocks']}, "
+        f"(replicas={n_replicas}, t_diffs={t_diff_list}, blocks={section['n_blocks']}, "
         f"device={shared['device']}, platform={shared['platform_name']})"
     )
 
@@ -137,7 +137,7 @@ def run_ad_dimer_once(
         pipes.append(pipe)
 
     init_states = [pipe["init_state"].clone() for pipe in pipes]
-    runner = AlanineReplicaExchange(pipes, taus=tau_list, rng_seed=seed)
+    runner = AlanineReplicaExchange(pipes, t_diffs=t_diff_list, rng_seed=seed)
     result = runner.run(
         n_blocks=int(section["n_blocks"]),
         inner_steps=int(section["inner_steps"]),
@@ -169,7 +169,7 @@ def run_ad_dimer_once(
         "mode": "ad_dimer",
         "checkpoint": str(shared["checkpoint"]),
         "pdb": str(section["pdb"]),
-        "tau_list": tau_list,
+        "t_diff_list": t_diff_list,
         "n_blocks": int(section["n_blocks"]),
         "inner_steps": int(section["inner_steps"]),
         "record_interval": int(section["record_interval"]),
@@ -186,7 +186,7 @@ def run_ad_dimer_once(
     }
 
     savez_payload = {
-        "taus": np.asarray(result["taus"], dtype=np.float64),
+        "t_diffs": np.asarray(result["t_diffs"], dtype=np.float64),
         "production_steps": production_steps,
         "dihedrals_by_replica_rad": all_dihedrals_rad,
         "dihedrals_by_replica_deg": np.degrees(all_dihedrals_rad),
@@ -218,7 +218,7 @@ def run_ad_dimer_once(
             labels_rep = classify_states(analysis_rep)
             analyses.append(analysis_rep)
             replica_summaries[f"replica_{rep}"] = {
-                "tau": tau_list[rep],
+                "t_diff": t_diff_list[rep],
                 "mean_com_distance_nm": float(np.mean(analysis_rep["com_distances"])),
                 "mean_cosine_similarity": float(np.mean(analysis_rep["cosine_similarities"])),
                 "mean_hbond_count": float(np.mean(analysis_rep["hbond_counts"])),
@@ -306,7 +306,7 @@ def run_ad_dimer_once(
         "summary_path": out_dir / "summary.json",
         "wall_time_s": float(result["wall_time_s"]),
         "seed": seed,
-        "tau_list": tau_list,
+        "t_diff_list": t_diff_list,
         "n_blocks": int(section["n_blocks"]),
         "checkpoint": shared["checkpoint"],
     }

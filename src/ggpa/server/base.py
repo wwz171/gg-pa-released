@@ -52,7 +52,7 @@ class ServerBase(ABC, Server):
     def register_clients(self, clients: Dict[str, Any], transport: Any) -> None:
         """Register clients and transport for default methods.
         
-        Called by FixedTauKernel during initialization.
+        Called by FixedDiffusionTimeKernel during initialization.
         Required for default implementations of create_requests, query_client_properties, etc.
         
         Performs validation:
@@ -90,7 +90,7 @@ class ServerBase(ABC, Server):
         # Test communication with each client
         logger.info("Testing communication with clients...")
         test_s = 0.0  # Dummy signal for testing
-        test_tau = 0.5
+        test_t_diff = 0.5
         
         for client_id in clients.keys():
             try:
@@ -98,7 +98,7 @@ class ServerBase(ABC, Server):
                 test_request = ClientRequest(
                     client_id=client_id,
                     s=test_s,
-                    tau=test_tau,
+                    t_diff=test_t_diff,
                     request_types='properties'
                 )
                 
@@ -150,7 +150,7 @@ class ServerBase(ABC, Server):
     def create_requests(
         self,
         s: Any,
-        tau: float,
+        t_diff: float,
         request_types: Union[str, List[str]],
         step: Optional[int] = None
     ) -> Dict[str, ClientRequest]:
@@ -160,7 +160,7 @@ class ServerBase(ABC, Server):
         
         Args:
             s: Current shared state
-            tau: Diffusion time parameter
+            t_diff: Diffusion time parameter
             request_types: What to request ('sample', 'gradient', 'log_prob', 'properties')
             step: Current iteration number (for diagnostics/seeding)
             
@@ -182,7 +182,7 @@ class ServerBase(ABC, Server):
             requests[client_id] = ClientRequest(
                 client_id=client_id,
                 s=s,
-                tau=tau,
+                t_diff=t_diff,
                 request_types=request_types,
                 request_id=f"step{step}_{client_id}" if step is not None else None,
                 seed=self._generate_seed(step, client_id),
@@ -194,7 +194,7 @@ class ServerBase(ABC, Server):
     def aggregate(
         self,
         s_current: Any,
-        tau: float,
+        t_diff: float,
         **kwargs
     ) -> Tuple[Any, Dict[str, Any]]:
         """Aggregate client samples into new shared state (DEFAULT IMPLEMENTATION).
@@ -208,7 +208,7 @@ class ServerBase(ABC, Server):
         
         Args:
             s_current: Current shared state
-            tau: Diffusion time parameter
+            t_diff: Diffusion time parameter
             **kwargs: Additional context (seed, step, etc.)
             
         Returns:
@@ -238,24 +238,24 @@ class ServerBase(ABC, Server):
         }
         
         # Delegate to aggregator
-        return self.aggregator.aggregate(s_current, tau, **aggregate_kwargs)
+        return self.aggregator.aggregate(s_current, t_diff, **aggregate_kwargs)
     def compute_gradient(
         self,
         s: Any,
-        tau: float
+        t_diff: float
     ) -> Dict[str, Any]:
-        """Compute ∇_s log q_τ(y_i | x_i) for all clients (DEFAULT IMPLEMENTATION).
+        """Compute ∇_s log q_t_diff(y_i | x_i) for all clients (DEFAULT IMPLEMENTATION).
         
-        Uses chain rule: ∇_s = (∂Φ/∂s)^T @ ∇_y log q_τ(y | x)
+        Uses chain rule: ∇_s = (∂Φ/∂s)^T @ ∇_y log q_t_diff(y | x)
         Client automatically handles:
         1. Projection: y = Φ(s)
         2. Uses cached x from client._current_x (no re-denoise)
-        3. Gradient: ∇_y log q_τ(y | x) via forward_process
+        3. Gradient: ∇_y log q_t_diff(y | x) via forward_process
         4. Chain rule: ∇_s via projector
         
         Args:
             s: Current shared state
-            tau: Diffusion time parameter
+            t_diff: Diffusion time parameter
             
         Returns:
             Dictionary mapping client_id to gradient arrays (same shape as s)
@@ -271,7 +271,7 @@ class ServerBase(ABC, Server):
             )
         
         # Request ONLY gradient — client uses cached _current_x (no re-denoise)
-        requests = self.create_requests(s, tau, request_types='gradient')
+        requests = self.create_requests(s, t_diff, request_types='gradient')
         replies = self._transport.call_all(requests.values())
         
         # Extract gradients
@@ -327,7 +327,7 @@ class ServerBase(ABC, Server):
             requests[client_id] = ClientRequest(
                 client_id=client_id,
                 s=None,  # Properties don't need s
-                tau=0.0,  # Arbitrary value
+                t_diff=0.0,  # Arbitrary value
                 request_types='properties',
                 metadata={'property_names': property_names}
             )
@@ -346,35 +346,35 @@ class ServerBase(ABC, Server):
     def reduced_potential(
         self,
         s: Any,
-        tau: float
+        t_diff: float
     ) -> ReducedPotential:
-        """Compute reduced potential U_τ(s, {x_i}) (DEFAULT IMPLEMENTATION).
+        """Compute reduced potential U_t_diff(s, {x_i}) (DEFAULT IMPLEMENTATION).
         
         The reduced potential is the negative log of the joint distribution:
-        U_τ(s, {x_i}) = -log[π(s)^β(τ) * ∏_i q_τ(y_i | x_i)]
-                      = -β(τ) * log π(s) - Σ_i log q_τ(y_i | x_i)
+        U_t_diff(s, {x_i}) = -log[π(s)^β(t_diff) * ∏_i q_t_diff(y_i | x_i)]
+                      = -β(t_diff) * log π(s) - Σ_i log q_t_diff(y_i | x_i)
         
         Components:
-        - Context term: -β(τ) * log π(s) from self.context
-        - Likelihood terms: -log q_τ(y_i | x_i) from clients via Request/Reply
+        - Context term: -β(t_diff) * log π(s) from self.context
+        - Likelihood terms: -log q_t_diff(y_i | x_i) from clients via Request/Reply
         
         Clients use their cached _current_x (set during the last 'sample'
         request, e.g. from kernel.step) instead of re-denoising:
         1. Projection: y_i = Φ_i(s)
         2. Uses cached x_i from client._current_x
-        3. Log prob: log q_τ(y_i | x_i)
+        3. Log prob: log q_t_diff(y_i | x_i)
         
         Args:
             s: Current shared state
-            tau: Diffusion time parameter
+            t_diff: Diffusion time parameter
             
         Returns:
             ReducedPotential object with:
-            - tau: Diffusion time
+            - t_diff: Diffusion time
             - log_q_ctx: Context contribution
             - log_q_fwd: Dict of per-client likelihood contributions
             - total_log_q: Sum of all log probabilities
-            - u_tau: Reduced potential (negative total_log_q)
+            - u_t_diff: Reduced potential (negative total_log_q)
             
         Raises:
             ConfigurationError: If context not set or transport not registered
@@ -389,13 +389,13 @@ class ServerBase(ABC, Server):
                 "Server must register transport via register_clients() before computing reduced potential"
             )
         
-        # 1. Context term: β(τ) * log π(s)
+        # 1. Context term: β(t_diff) * log π(s)
         # Shape: same as what context.log_q_ctx() returns (user-defined)
-        log_q_ctx = self.context.log_q_ctx(s, tau)
+        log_q_ctx = self.context.log_q_ctx(s, t_diff)
         
-        # 2. Likelihood terms: log q_τ(y_i | x_i) for each client
+        # 2. Likelihood terms: log q_t_diff(y_i | x_i) for each client
         # Request ONLY log_prob — client uses cached _current_x (no re-denoise)
-        requests = self.create_requests(s, tau, request_types=['log_prob'])
+        requests = self.create_requests(s, t_diff, request_types=['log_prob'])
         replies = self._transport.call_all(requests.values())
         
         # 3. Collect results and check shape consistency
@@ -428,13 +428,13 @@ class ServerBase(ABC, Server):
                     total = total + log_q  # Element-wise addition with broadcasting
         
         # 4. Construct ReducedPotential
-        u_tau = -total
+        u_t_diff = -total
         return ReducedPotential(
-            tau=tau,
+            t_diff=t_diff,
             log_q_ctx=log_q_ctx,
             log_q_fwd=log_q_fwd,
             total_log_q=total,
-            u_tau=u_tau
+            u_t_diff=u_t_diff
         )
 
 
@@ -446,10 +446,10 @@ class ServerBase(ABC, Server):
 class AggregationBase(ABC):
     """Abstract base class for aggregation implementations.
     
-    This is THE CORE of GG-PA - it defines how to sample s from p(s | {x_i}, τ).
+    This is THE CORE of GG-PA - it defines how to sample s from p(s | {x_i}, t_diff).
     
     KEY DESIGN:
-    - Signature: aggregate(s_current, tau, **kwargs) - NO xs parameter!
+    - Signature: aggregate(s_current, t_diff, **kwargs) - NO xs parameter!
     - Helper methods: fetch_samples(), fetch_gradients(), fetch_log_probs()
     - Flexible: Extract only what you need from kwargs
     
@@ -458,28 +458,28 @@ class AggregationBase(ABC):
     
     HELPER METHODS (provided by base):
     ===================================
-        fetch_samples(s, tau, server, transport): Get all client samples
-        fetch_gradients(s, tau, server, transport): Get all client gradients
-        fetch_log_probs(s, tau, server, transport): Get all client log_probs
+        fetch_samples(s, t_diff, server, transport): Get all client samples
+        fetch_gradients(s, t_diff, server, transport): Get all client gradients
+        fetch_log_probs(s, t_diff, server, transport): Get all client log_probs
     
     Required method:
-        aggregate(s_current, tau, **kwargs): Sample new signal from posterior
+        aggregate(s_current, t_diff, **kwargs): Sample new signal from posterior
     
     Example (using helpers):
         class MyMCMCAggregator(AggregationBase):
             def __init__(self, n_steps=100):
                 self.n_steps = n_steps
             
-            def aggregate(self, s_current, tau, **kwargs):
+            def aggregate(self, s_current, t_diff, **kwargs):
                 server = kwargs['server']
                 transport = kwargs['transport']
                 context = kwargs['context']
                 
                 # Use helper to fetch samples (easy!)
-                xs = self.fetch_samples(s_current, tau, server, transport)
+                xs = self.fetch_samples(s_current, t_diff, server, transport)
                 
                 # Your aggregation logic
-                s_new = my_aggregation_method(s_current, xs, tau, context)
+                s_new = my_aggregation_method(s_current, xs, t_diff, context)
                 return s_new, {"method": "custom"}
     """
     
@@ -488,7 +488,7 @@ class AggregationBase(ABC):
     def fetch_samples(
         self,
         s: Any,
-        tau: float,
+        t_diff: float,
         server: Any,
         transport: Any
     ) -> Dict[str, Any]:
@@ -496,14 +496,14 @@ class AggregationBase(ABC):
         
         Args:
             s: Current signal
-            tau: Diffusion time
+            t_diff: Diffusion time
             server: Server instance (provides create_requests)
             transport: Transport instance (provides call_all)
             
         Returns:
             Dictionary mapping client_id to sample
         """
-        requests = server.create_requests(s, tau, request_types='sample')
+        requests = server.create_requests(s, t_diff, request_types='sample')
         replies = transport.call_all(requests.values())
         
         xs = {}
@@ -517,7 +517,7 @@ class AggregationBase(ABC):
     def fetch_gradients(
         self,
         s: Any,
-        tau: float,
+        t_diff: float,
         server: Any,
         transport: Any
     ) -> Dict[str, Any]:
@@ -528,7 +528,7 @@ class AggregationBase(ABC):
         
         Args:
             s: Current signal
-            tau: Diffusion time
+            t_diff: Diffusion time
             server: Server instance
             transport: Transport instance
             
@@ -536,7 +536,7 @@ class AggregationBase(ABC):
             Dictionary mapping client_id to gradient
         """
         # Request ONLY gradient — client uses cached _current_x (no re-denoise)
-        requests = server.create_requests(s, tau, request_types='gradient')
+        requests = server.create_requests(s, t_diff, request_types='gradient')
         replies = transport.call_all(requests.values())
         
         grads = {}
@@ -550,7 +550,7 @@ class AggregationBase(ABC):
     def fetch_log_probs(
         self,
         s: Any,
-        tau: float,
+        t_diff: float,
         server: Any,
         transport: Any
     ) -> Dict[str, float]:
@@ -561,7 +561,7 @@ class AggregationBase(ABC):
         
         Args:
             s: Current signal
-            tau: Diffusion time
+            t_diff: Diffusion time
             server: Server instance
             transport: Transport instance
             
@@ -569,7 +569,7 @@ class AggregationBase(ABC):
             Dictionary mapping client_id to log_prob (float)
         """
         # Request ONLY log_prob — client uses cached _current_x (no re-denoise)
-        requests = server.create_requests(s, tau, request_types='log_prob')
+        requests = server.create_requests(s, t_diff, request_types='log_prob')
         replies = transport.call_all(requests.values())
         
         log_probs = {}
@@ -584,7 +584,7 @@ class AggregationBase(ABC):
     def aggregate(
         self,
         s_current: Any,
-        tau: float,
+        t_diff: float,
         **kwargs
     ) -> Tuple[Any, Dict[str, Any]]:
         """Aggregate client samples into new signal.
@@ -593,12 +593,12 @@ class AggregationBase(ABC):
         
         KEY DESIGN:
         - NO xs parameter! Fetch samples on-demand via Request/Reply
-        - Only 2 required params: s_current, tau
+        - Only 2 required params: s_current, t_diff
         - Everything else via **kwargs
         
         Args:
             s_current: Current signal state (any format)
-            tau: Diffusion time in [0, 1]
+            t_diff: Diffusion time in [0, 1]
             **kwargs: All data user might need:
                 
                 Always provided by framework:
@@ -616,17 +616,17 @@ class AggregationBase(ABC):
                 - diagnostics: Dict with aggregation info
         
         Example:
-            def aggregate(self, s_current, tau, **kwargs):
+            def aggregate(self, s_current, t_diff, **kwargs):
                 server = kwargs['server']
                 transport = kwargs['transport']
                 
                 # Fetch samples
-                requests = server.create_requests(s_current, tau, 'sample')
+                requests = server.create_requests(s_current, t_diff, 'sample')
                 replies = transport.call_all(requests.values())
                 xs = {r.client_id: r.data['sample'] for r in replies}
                 
                 # Your aggregation logic here
-                s_new = my_aggregation_method(s_current, xs, tau)
+                s_new = my_aggregation_method(s_current, xs, t_diff)
                 return s_new, {"method": "custom"}
         """
         pass
@@ -635,29 +635,29 @@ class AggregationBase(ABC):
 class ContextBase(ABC):
     """Abstract base class for context density implementations.
     
-    Context provides constraints on the global signal s, tempered by tau.
+    Context provides constraints on the global signal s, tempered by t_diff.
     
     Users only need to implement log_prob() for basic functionality.
     Optional: grad_log_prob() for gradient-based aggregation.
     
-    The context density π(s) is tempered by f(τ) to get π(s)^{f(τ)}.
-    Default tempering: f(τ) = 1 - τ (linear annealing from full constraint to none).
+    The context density π(s) is tempered by f(t_diff) to get π(s)^{f(t_diff)}.
+    Default tempering: f(t_diff) = 1 - t_diff (linear annealing from full constraint to none).
     
     Required methods:
         log_prob(s): Unnormalized log probability log π(s)
     
     Optional methods:
         grad_log_prob(s): Gradient ∇_s log π(s) for gradient-based aggregators
-        tempering_factor(tau): Custom tempering schedule (default: 1 - tau)
+        tempering_factor(t_diff): Custom tempering schedule (default: 1 - t_diff)
     """
     
     @abstractmethod
-    def log_prob(self, s: Any, tau: float) -> Any:
+    def log_prob(self, s: Any, t_diff: float) -> Any:
         """Log probability log p_ctx(s) (unnormalized OK).
         
         Args:
             s: Signal (any format)
-            tau: Diffusion time
+            t_diff: Diffusion time
             
         Returns:
             Log probability (shape flexible: scalar, (B,), (B,D), etc.)
@@ -669,38 +669,38 @@ class ContextBase(ABC):
         """
         pass
 
-    def tempering_factor(self, tau: float) -> float:
-        """Tempering schedule f(tau) controlling constraint strength.
+    def tempering_factor(self, t_diff: float) -> float:
+        """Tempering schedule f(t_diff) controlling constraint strength.
         
-        Default: f(tau) = 1 - tau (linear annealing)
-        - tau = 0: f(0) = 1, full constraint
-        - tau = 1: f(1) = 0, no constraint
+        Default: f(t_diff) = 1 - t_diff (linear annealing)
+        - t_diff = 0: f(0) = 1, full constraint
+        - t_diff = 1: f(1) = 0, no constraint
         
         Override this method to use custom tempering schedules.
         
         Args:
-            tau: Diffusion time in [0, 1]
+            t_diff: Diffusion time in [0, 1]
             
         Returns:
             Tempering factor in [0, 1]
         """
-        return 1.0 - tau
+        return 1.0 - t_diff
 
-    def log_q_ctx(self, s: Any, tau: float) -> Any:
-        """Tempered log probability: f(tau) * log p_ctx(s).
+    def log_q_ctx(self, s: Any, t_diff: float) -> Any:
+        """Tempered log probability: f(t_diff) * log p_ctx(s).
         
         Usually doesn't need overriding - uses tempering_factor().
         
         Args:
             s: Signal (any format)
-            tau: Diffusion time
+            t_diff: Diffusion time
             
         Returns:
             Tempered log probability (shape determined by log_prob implementation)
         """
-        return self.tempering_factor(tau) * self.log_prob(s, tau)
+        return self.tempering_factor(t_diff) * self.log_prob(s, t_diff)
 
-    def grad_log_prob(self, s: Any, tau: float) -> Optional[Any]:
+    def grad_log_prob(self, s: Any, t_diff: float) -> Optional[Any]:
         """Gradient ∇_s log p_ctx(s) for gradient-based aggregation.
         
         Optional: Return None if not needed or not computable.
@@ -708,10 +708,9 @@ class ContextBase(ABC):
         
         Args:
             s: Signal (any format)
-            tau: Diffusion time
+            t_diff: Diffusion time
             
         Returns:
             Gradient same shape as s (any format), or None
         """
         return None
-

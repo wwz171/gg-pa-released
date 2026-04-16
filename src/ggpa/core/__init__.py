@@ -1,6 +1,6 @@
 """Core GG-PA components.
 
-Core protocols (used by FixedTauKernel):
+Core protocols (used by FixedDiffusionTimeKernel):
 - Server: Coordinates GG-PA iterations
 - Client: Handles sampling requests
 - Transport: Manages client communication
@@ -14,14 +14,14 @@ from ggpa.core.interfaces import (
     Client,
     Transport,
 )
-from ggpa.core.kernel import FixedTauKernel
+from ggpa.core.kernel import FixedDiffusionTimeKernel
 from ggpa.core.state import State, StepDiagnostics
 
 __all__ = [
     "Server",
     "Client",
     "Transport",
-    "FixedTauKernel",
+    "FixedDiffusionTimeKernel",
     "State",
     "StepDiagnostics",
 ]

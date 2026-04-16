@@ -23,17 +23,17 @@ class ClientBase(ABC, Client):
     ====================
         client_id (str): Unique identifier for this client
         projector (ProjectorBase): Signal projection Φ: s → y
-        forward_process (ForwardProcessBase): Forward diffusion q_τ(y | x)
+        forward_process (ForwardProcessBase): Forward diffusion q_t_diff(y | x)
     
     REQUIRED METHODS:
     =================
-        denoise_sample(y, tau, seed): The ONLY method users must implement!
+        denoise_sample(y, t_diff, seed): The ONLY method users must implement!
     
     SUPPORTED REQUEST TYPES:
     ========================
-        - 'sample': Returns denoised x ~ p(x | y=Φ(s), τ)
-        - 'gradient': Returns ∇_s log q_τ(y | x) via chain rule
-        - 'log_prob': Returns log q_τ(y | x)
+        - 'sample': Returns denoised x ~ p(x | y=Φ(s), t_diff)
+        - 'gradient': Returns ∇_s log q_t_diff(y | x) via chain rule
+        - 'log_prob': Returns log q_t_diff(y | x)
         - 'properties': Returns client metadata
     
     MINIMAL USER CODE EXAMPLE:
@@ -45,17 +45,17 @@ class ClientBase(ABC, Client):
                 self.projector = IdentityProjector()
                 self.forward_process = GaussianForwardProcess()
             
-            def denoise_sample(self, y, tau, seed=None):
-                # That's it! Just denoise y given tau
-                return self.model.denoise(y, tau, seed)
+            def denoise_sample(self, y, t_diff, seed=None):
+                # That's it! Just denoise y given t_diff
+                return self.model.denoise(y, t_diff, seed)
     
     ADVANCED: Overriding default behavior
     ======================================
     Users can optionally override these methods for custom behavior:
-        - compute_log_prob(y, x, tau): Custom log prob computation
+        - compute_log_prob(y, x, t_diff): Custom log prob computation
         - get_public_properties(): Control which properties are exposed to server
         - _build_all_properties(): Add custom properties beyond defaults
-        - compute_gradient(y, x, tau, s): Custom gradient computation
+        - compute_gradient(y, x, t_diff, s): Custom gradient computation
         - get_properties(): Custom metadata
         - handle_request(request): Full custom request handling
     """
@@ -88,47 +88,47 @@ class ClientBase(ABC, Client):
     # ========== REQUIRED: User must implement this ==========
     
     @abstractmethod
-    def denoise_sample(self, y: Any, tau: float, seed: Optional[int] = None) -> Any:
-        """The CORE method: denoise observation y given noise level tau.
+    def denoise_sample(self, y: Any, t_diff: float, seed: Optional[int] = None) -> Any:
+        """The CORE method: denoise observation y given noise level t_diff.
         
         This is the ONLY method users MUST implement!
         
         Args:
             y: Projected observation y = Φ(s)
-            tau: Diffusion time τ ∈ [0, 1]
+            t_diff: Diffusion time t_diff ∈ [0, 1]
             seed: Optional random seed for deterministic sampling
         
         Returns:
             x: Denoised sample (same space as y)
         
         Example:
-            def denoise_sample(self, y, tau, seed=None):
-                return self.model.denoise(y, tau, seed)
+            def denoise_sample(self, y, t_diff, seed=None):
+                return self.model.denoise(y, t_diff, seed)
         """
         pass
 
     # ========== DEFAULT IMPLEMENTATIONS: Users rarely need to override ==========
     
-    def compute_log_prob(self, y: Any, x: Any, tau: float) -> Any:
-        """Compute log q_τ(y | x) using forward_process.
+    def compute_log_prob(self, y: Any, x: Any, t_diff: float) -> Any:
+        """Compute log q_t_diff(y | x) using forward_process.
         
         Default implementation: Calls self.forward_process.log_q_fwd()
         
         Args:
             y: Noisy observation
             x: Clean sample
-            tau: Diffusion time
+            t_diff: Diffusion time
         
         Returns:
             Log probability (can be scalar, array, or any type)
         """
-        return self.forward_process.log_q_fwd(y, x, tau)
+        return self.forward_process.log_q_fwd(y, x, t_diff)
     
-    def compute_gradient(self, y: Any, x: Any, tau: float, s: Any) -> Optional[Any]:
-        """Compute gradient ∇_s log q_τ(y | x) using chain rule.
+    def compute_gradient(self, y: Any, x: Any, t_diff: float, s: Any) -> Optional[Any]:
+        """Compute gradient ∇_s log q_t_diff(y | x) using chain rule.
         
         Default implementation:
-            1. Compute ∇_y log q_τ(y | x) via forward_process.grad_log_q_fwd()
+            1. Compute ∇_y log q_t_diff(y | x) via forward_process.grad_log_q_fwd()
             2. Apply chain rule: ∇_s = (∂Φ/∂s)^T @ ∇_y via projector.backprop_gradient()
         
         Returns None if forward_process doesn't support gradients.
@@ -136,14 +136,14 @@ class ClientBase(ABC, Client):
         Args:
             y: Noisy observation
             x: Clean sample
-            tau: Diffusion time
+            t_diff: Diffusion time
             s: Signal (needed for chain rule)
         
         Returns:
-            Gradient ∇_s log q_τ(y | x), or None if not supported
+            Gradient ∇_s log q_t_diff(y | x), or None if not supported
         """
-        # Step 1: Compute ∇_y log q_τ(y | x)
-        grad_y = self.forward_process.grad_log_q_fwd(y, x, tau)
+        # Step 1: Compute ∇_y log q_t_diff(y | x)
+        grad_y = self.forward_process.grad_log_q_fwd(y, x, t_diff)
         if grad_y is None:
             return None
         
@@ -299,7 +299,7 @@ class ClientBase(ABC, Client):
             for req_type in types:
                 if req_type == 'sample':
                     # Generate sample and cache it
-                    x = self.denoise_sample(y, request.tau, request.seed)
+                    x = self.denoise_sample(y, request.t_diff, request.seed)
                     data['sample'] = x
                     self._current_x = x          # ← cache for later log_prob / gradient
                 
@@ -309,14 +309,14 @@ class ClientBase(ABC, Client):
                         if self.current_x is not None:
                             x = self.current_x
                         else:
-                            x = self.denoise_sample(y, request.tau, request.seed)
+                            x = self.denoise_sample(y, request.t_diff, request.seed)
                             self._current_x = x
                         data['sample'] = x
                     else:
                         x = data['sample']
                     
                     # Compute gradient (may return None if not supported)
-                    grad = self.compute_gradient(y, x, request.tau, request.s)
+                    grad = self.compute_gradient(y, x, request.t_diff, request.s)
                     data['gradient'] = grad
                 
                 elif req_type == 'log_prob':
@@ -325,14 +325,14 @@ class ClientBase(ABC, Client):
                         if self.current_x is not None:
                             x = self.current_x
                         else:
-                            x = self.denoise_sample(y, request.tau, request.seed)
+                            x = self.denoise_sample(y, request.t_diff, request.seed)
                             self._current_x = x
                         data['sample'] = x
                     else:
                         x = data['sample']
                     
                     # Compute log probability
-                    log_prob = self.compute_log_prob(y, x, request.tau)
+                    log_prob = self.compute_log_prob(y, x, request.t_diff)
                     data['log_prob'] = log_prob
                 
                 elif req_type == 'properties':
@@ -462,34 +462,34 @@ class ForwardProcessBase(ABC):
     """Abstract base class for forward diffusion process implementations.
     
     Forward process defines how clean samples x are corrupted to observations y.
-    Typically: q_τ(y | x) = N(y; α(τ)x, σ²(τ)I) for Gaussian noise.
+    Typically: q_t_diff(y | x) = N(y; α(t_diff)x, σ²(t_diff)I) for Gaussian noise.
     
     Required methods:
-        log_q_fwd(y, x, tau): Log density log q_τ(y | x)
-        alpha(tau): Signal coefficient α(τ)
-        sigma(tau): Noise standard deviation σ(τ)
+        log_q_fwd(y, x, t_diff): Log density log q_t_diff(y | x)
+        alpha(t_diff): Signal coefficient α(t_diff)
+        sigma(t_diff): Noise standard deviation σ(t_diff)
     
     Required methods:
-        grad_log_q_fwd(y, x, tau): Gradient ∇_y log q_τ(y | x)
+        grad_log_q_fwd(y, x, t_diff): Gradient ∇_y log q_t_diff(y | x)
     
     Example (Gaussian forward process):
         class GaussianForward(ForwardProcessBase):
-            def log_q_fwd(self, y, x, tau):
-                alpha = self.alpha(tau)
-                sigma = self.sigma(tau)
+            def log_q_fwd(self, y, x, t_diff):
+                alpha = self.alpha(t_diff)
+                sigma = self.sigma(t_diff)
                 # log N(y; alpha*x, sigma^2)
                 return -0.5 * np.sum((y - alpha * x)**2) / sigma**2
             
-            def alpha(self, tau):
-                return np.sqrt(1 - tau)
+            def alpha(self, t_diff):
+                return np.sqrt(1 - t_diff)
             
-            def sigma(self, tau):
-                return np.sqrt(tau)
+            def sigma(self, t_diff):
+                return np.sqrt(t_diff)
     """
     
     @abstractmethod
-    def log_q_fwd(self, y: Any, x: Any, tau: float) -> Any:
-        """Compute log q_τ(y | x).
+    def log_q_fwd(self, y: Any, x: Any, t_diff: float) -> Any:
+        """Compute log q_t_diff(y | x).
         
         Used for:
         1. Reduced potential computation
@@ -498,7 +498,7 @@ class ForwardProcessBase(ABC):
         Args:
             y: Noisy observation
             x: Clean sample
-            tau: Diffusion time in [0, 1]
+            t_diff: Diffusion time in [0, 1]
             
         Returns:
             Log probability (can be scalar, array, or any type)
@@ -507,13 +507,13 @@ class ForwardProcessBase(ABC):
         pass
     
     @abstractmethod
-    def alpha(self, tau: float) -> Any:
-        """Signal coefficient α(τ) in diffusion process.
+    def alpha(self, t_diff: float) -> Any:
+        """Signal coefficient α(t_diff) in diffusion process.
         
-        For DDPM-style: α(τ) = √(1 - τ)
+        For DDPM-style: α(t_diff) = √(1 - t_diff)
         
         Args:
-            tau: Diffusion time
+            t_diff: Diffusion time
             
         Returns:
             Signal coefficient (typically scalar, but can be any type)
@@ -521,13 +521,13 @@ class ForwardProcessBase(ABC):
         pass
     
     @abstractmethod
-    def sigma(self, tau: float) -> Any:
-        """Noise standard deviation σ(τ) in diffusion process.
+    def sigma(self, t_diff: float) -> Any:
+        """Noise standard deviation σ(t_diff) in diffusion process.
         
-        For DDPM-style: σ(τ) = √τ
+        For DDPM-style: σ(t_diff) = √t_diff
         
         Args:
-            tau: Diffusion time
+            t_diff: Diffusion time
             
         Returns:
             Noise standard deviation (typically scalar, but can be any type)
@@ -535,8 +535,8 @@ class ForwardProcessBase(ABC):
         pass
     
     @abstractmethod
-    def grad_log_q_fwd(self, y: Any, x: Any, tau: float) -> Any:
-        """Compute gradient ∇_y log q_τ(y | x).
+    def grad_log_q_fwd(self, y: Any, x: Any, t_diff: float) -> Any:
+        """Compute gradient ∇_y log q_t_diff(y | x).
         
         REQUIRED METHOD for gradient-based aggregation!
         
@@ -546,13 +546,13 @@ class ForwardProcessBase(ABC):
         3. Chain rule computation in ClientBase.compute_gradient()
         
         For Gaussian forward process:
-            q_τ(y | x) = N(y; α(τ)x, σ²(τ)I)
-            ∇_y log q_τ(y | x) = -(y - α(τ)x) / σ²(τ)
+            q_t_diff(y | x) = N(y; α(t_diff)x, σ²(t_diff)I)
+            ∇_y log q_t_diff(y | x) = -(y - α(t_diff)x) / σ²(t_diff)
         
         Args:
             y: Noisy observation
             x: Clean sample
-            tau: Diffusion time
+            t_diff: Diffusion time
             
         Returns:
             Gradient with same shape as y

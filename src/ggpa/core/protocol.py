@@ -20,11 +20,11 @@ class ClientRequest:
     Attributes:
         client_id: Unique client identifier
         s: Signal in signal space (client handles projection)
-        tau: Diffusion time in [0, 1]
+        t_diff: Diffusion time in [0, 1]
         request_types: Single or list of request types:
-            - 'sample': Get denoised sample x ~ p(x | y, tau)
+            - 'sample': Get denoised sample x ~ p(x | y, t_diff)
             - 'gradient': Get gradient ∇_s log p(Φ(s))
-            - 'log_prob': Get log probability log p(Φ(s) | tau)
+            - 'log_prob': Get log probability log p(Φ(s) | t_diff)
             - 'properties': Query client metadata
         request_id: Optional ID for tracking
         seed: Optional random seed for reproducibility
@@ -33,7 +33,7 @@ class ClientRequest:
     """
     client_id: str
     s: Any
-    tau: float
+    t_diff: float
     request_types: Union[str, List[str]]
     request_id: Optional[str] = None
     seed: Optional[int] = None

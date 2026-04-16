@@ -7,9 +7,9 @@ import hashlib
 import numpy as np
 
 
-def clamp_tau(tau: float, tau_min: float) -> float:
-    """Clamp tau to [tau_min, 1.0]."""
-    return float(max(tau_min, min(1.0, tau)))
+def clamp_t_diff(t_diff: float, t_diff_min: float) -> float:
+    """Clamp t_diff to [t_diff_min, 1.0]."""
+    return float(max(t_diff_min, min(1.0, t_diff)))
 
 
 def seed_for_client(master_seed: Optional[int], step: int, client_id: str) -> Optional[int]:

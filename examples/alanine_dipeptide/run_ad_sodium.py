@@ -112,7 +112,7 @@ def run_ad_sodium_once(
 
     print(
         "Running alanine dipeptide + Na+ GG-PA example "
-        f"(tau={section['tau']}, steps={section['n_steps']}, device={shared['device']}, "
+        f"(t_diff={section['t_diff']}, steps={section['n_steps']}, device={shared['device']}, "
         f"platform={shared['platform_name']})"
     )
 
@@ -155,7 +155,7 @@ def run_ad_sodium_once(
 
     aggregator.write_current_pdb(out_dir / "ad_sodium_initial.pdb")
 
-    tau = float(section["tau"])
+    t_diff = float(section["t_diff"])
     n_steps = int(section["n_steps"])
     record_interval = int(section["record_interval"])
     print_every = int(section["print_every"])
@@ -171,7 +171,7 @@ def run_ad_sodium_once(
     for step_idx in range(n_steps):
         state, _ = kernel.step(
             state,
-            tau,
+            t_diff,
             compute_reduced_potential=compute_reduced_potential,
         )
 
@@ -204,7 +204,7 @@ def run_ad_sodium_once(
     np.savez_compressed(
         out_dir / "ad_sodium_results.npz",
         steps=recorded_steps_arr,
-        tau=np.array(tau, dtype=np.float64),
+        t_diff=np.array(t_diff, dtype=np.float64),
         wall_time_s=np.array(wall_time, dtype=np.float64),
         dihedrals_rad=dihedrals_rad_arr,
         dihedrals_deg=np.degrees(dihedrals_rad_arr),
@@ -221,7 +221,7 @@ def run_ad_sodium_once(
             "mode": "ad_sodium",
             "checkpoint": str(shared["checkpoint"]),
             "pdb": str(section["pdb"]),
-            "tau": tau,
+            "t_diff": t_diff,
             "n_steps": n_steps,
             "record_interval": record_interval,
             "md_steps": int(section["md_steps"]),
@@ -256,7 +256,7 @@ def run_ad_sodium_once(
         "summary_path": out_dir / "summary.json",
         "wall_time_s": wall_time,
         "seed": seed,
-        "tau": tau,
+        "t_diff": t_diff,
         "n_steps": n_steps,
         "checkpoint": shared["checkpoint"],
     }

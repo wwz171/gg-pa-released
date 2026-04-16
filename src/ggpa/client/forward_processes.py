@@ -22,7 +22,7 @@ from ggpa.core.errors import ConfigurationError, ShapeError
 
 @dataclass(frozen=True)
 class NoiseSchedule:
-    """Noise schedule providing alpha(tau) and sigma(tau).
+    """Noise schedule providing alpha(t_diff) and sigma(t_diff).
     
     This is a helper class for Gaussian forward processes.
     """
@@ -30,44 +30,44 @@ class NoiseSchedule:
     alpha_fn: Callable[[float], float]
     sigma_fn: Callable[[float], float]
 
-    def alpha(self, tau: float) -> float:
-        """Signal preservation coefficient at time tau."""
-        return float(self.alpha_fn(tau))
+    def alpha(self, t_diff: float) -> float:
+        """Signal preservation coefficient at time t_diff."""
+        return float(self.alpha_fn(t_diff))
 
-    def sigma(self, tau: float) -> float:
-        """Noise standard deviation at time tau."""
-        return float(self.sigma_fn(tau))
+    def sigma(self, t_diff: float) -> float:
+        """Noise standard deviation at time t_diff."""
+        return float(self.sigma_fn(t_diff))
 
 
 @dataclass(frozen=True)
 class GaussianForwardProcess(ForwardProcessBase):
-    """Gaussian forward process q_tau(y | x) = N(y; alpha(tau) * x, sigma(tau)^2 * I).
+    """Gaussian forward process q_t_diff(y | x) = N(y; alpha(t_diff) * x, sigma(t_diff)^2 * I).
     
     This is the most common forward process used in diffusion models.
     
     Provides:
-        - log_q_fwd(y, x, tau): Log probability for reduced potential
-        - grad_log_q_fwd(y, x, tau): Gradient for MCMC aggregators
-        - alpha(tau), sigma(tau): Schedule parameters for closed-form aggregation
+        - log_q_fwd(y, x, t_diff): Log probability for reduced potential
+        - grad_log_q_fwd(y, x, t_diff): Gradient for MCMC aggregators
+        - alpha(t_diff), sigma(t_diff): Schedule parameters for closed-form aggregation
     """
 
     schedule: NoiseSchedule
 
-    def alpha(self, tau: float) -> float:
-        """Signal preservation coefficient at time tau."""
-        return self.schedule.alpha(tau)
+    def alpha(self, t_diff: float) -> float:
+        """Signal preservation coefficient at time t_diff."""
+        return self.schedule.alpha(t_diff)
 
-    def sigma(self, tau: float) -> float:
-        """Noise standard deviation at time tau."""
-        return self.schedule.sigma(tau)
+    def sigma(self, t_diff: float) -> float:
+        """Noise standard deviation at time t_diff."""
+        return self.schedule.sigma(t_diff)
 
-    def log_q_fwd(self, y: np.ndarray, x: np.ndarray, tau: float) -> Any:
-        """Compute log q_tau(y | x) for Gaussian forward process.
+    def log_q_fwd(self, y: np.ndarray, x: np.ndarray, t_diff: float) -> Any:
+        """Compute log q_t_diff(y | x) for Gaussian forward process.
         
         Args:
             y: Noisy observation (any shape)
             x: Clean sample (same shape as y)
-            tau: Diffusion time
+            t_diff: Diffusion time
             
         Returns:
             Log probability log N(y; alpha*x, sigma^2*I)
@@ -84,8 +84,8 @@ class GaussianForwardProcess(ForwardProcessBase):
         if y.shape != x.shape:
             raise ShapeError(f"y.shape {y.shape} != x.shape {x.shape}")
         
-        alpha = self.alpha(tau)
-        sigma = self.sigma(tau)
+        alpha = self.alpha(t_diff)
+        sigma = self.sigma(t_diff)
         if sigma <= 0:
             raise ConfigurationError("sigma must be positive")
         
@@ -95,23 +95,23 @@ class GaussianForwardProcess(ForwardProcessBase):
         quad = -0.5 * float(np.dot(resid.ravel(), resid.ravel()) / (sigma * sigma))
         return log_norm + quad
 
-    def grad_log_q_fwd(self, y: np.ndarray, x: np.ndarray, tau: float) -> np.ndarray:
-        """Compute gradient ∇_y log q_tau(y | x).
+    def grad_log_q_fwd(self, y: np.ndarray, x: np.ndarray, t_diff: float) -> np.ndarray:
+        """Compute gradient ∇_y log q_t_diff(y | x).
         
         For Gaussian: ∇_y log N(y; μ, σ²I) = -(y - μ) / σ²
         
         Args:
             y: Noisy observation
             x: Clean sample
-            tau: Diffusion time
+            t_diff: Diffusion time
             
         Returns:
             Gradient vector with same shape as y
         """
         y = np.asarray(y)
         x = np.asarray(x)
-        alpha = self.alpha(tau)
-        sigma = self.sigma(tau)
+        alpha = self.alpha(t_diff)
+        sigma = self.sigma(t_diff)
         if sigma <= 0:
             raise ConfigurationError("sigma must be positive")
         
@@ -125,7 +125,7 @@ def make_variance_preserving_schedule(
 ) -> NoiseSchedule:
     """Create a Variance Preserving (VP) noise schedule.
     
-    VP schedule ensures α²(τ) + σ²(τ) = 1.
+    VP schedule ensures α²(t_diff) + σ²(t_diff) = 1.
     Commonly used in DDPM-style models.
     
     Args:
@@ -135,13 +135,13 @@ def make_variance_preserving_schedule(
     Returns:
         NoiseSchedule with VP properties
     """
-    def alpha(tau: float) -> float:
+    def alpha(t_diff: float) -> float:
         # Linear interpolation of log SNR
-        beta_t = beta_min + tau * (beta_max - beta_min)
-        return np.exp(-0.5 * beta_t * tau)
+        beta_t = beta_min + t_diff * (beta_max - beta_min)
+        return np.exp(-0.5 * beta_t * t_diff)
     
-    def sigma(tau: float) -> float:
-        alpha_t = alpha(tau)
+    def sigma(t_diff: float) -> float:
+        alpha_t = alpha(t_diff)
         return np.sqrt(1.0 - alpha_t * alpha_t)
     
     return NoiseSchedule(alpha_fn=alpha, sigma_fn=sigma)
@@ -153,7 +153,7 @@ def make_variance_exploding_schedule(
 ) -> NoiseSchedule:
     """Create a Variance Exploding (VE) noise schedule.
     
-    VE schedule keeps α(τ) = 1 and varies σ(τ).
+    VE schedule keeps α(t_diff) = 1 and varies σ(t_diff).
     Commonly used in score-based models.
     
     Args:
@@ -163,12 +163,12 @@ def make_variance_exploding_schedule(
     Returns:
         NoiseSchedule with VE properties
     """
-    def alpha(tau: float) -> float:
+    def alpha(t_diff: float) -> float:
         return 1.0
     
-    def sigma(tau: float) -> float:
+    def sigma(t_diff: float) -> float:
         # Geometric interpolation
-        log_sigma = np.log(sigma_min) + tau * (np.log(sigma_max) - np.log(sigma_min))
+        log_sigma = np.log(sigma_min) + t_diff * (np.log(sigma_max) - np.log(sigma_min))
         return np.exp(log_sigma)
     
     return NoiseSchedule(alpha_fn=alpha, sigma_fn=sigma)

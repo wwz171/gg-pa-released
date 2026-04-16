@@ -6,7 +6,7 @@ This module provides GG-PA components for sampling alanine dipeptide systems
 with a shared torsion-space diffusion prior coupled to OpenMM molecular
 dynamics. The public workflows currently supported here are:
 
-- alanine dipeptide + Na+ (single monomer, single-``tau`` GG-PA)
+- alanine dipeptide + Na+ (single monomer, single-``t_diff`` GG-PA)
 - alanine dipeptide dimer (two monomers, replica-exchange GG-PA)
 
 Signal space: full-atom Cartesian coordinates  s ∈ R^{N_atoms × 3}  (nm)
@@ -469,8 +469,8 @@ class TorsionProjector(ProjectorBase):
 class WrappedGaussianForwardProcess(ForwardProcessBase):
     r"""VE-style wrapped Gaussian forward process for torsion angles.
 
-    q_τ(y | x) = WG(y; x, σ(τ)²)   with  σ(τ) = σ_min · (σ_max/σ_min)^τ
-    α(τ) = 1.0  (VE schedule keeps the mean at x).
+    q_t_diff(y | x) = WG(y; x, σ(t_diff)²)   with  σ(t_diff) = σ_min · (σ_max/σ_min)^t_diff
+    α(t_diff) = 1.0  (VE schedule keeps the mean at x).
     """
 
     def __init__(self, sigma_min: float = 0.1, sigma_max: float = 3.0,
@@ -480,17 +480,17 @@ class WrappedGaussianForwardProcess(ForwardProcessBase):
         self.k_max = k_max
         self._log_ratio = np.log(sigma_max / sigma_min)
 
-    def alpha(self, tau: float) -> float:
+    def alpha(self, t_diff: float) -> float:
         return 1.0
 
-    def sigma(self, tau: float) -> float:
-        return self.sigma_min * np.exp(self._log_ratio * tau)
+    def sigma(self, t_diff: float) -> float:
+        return self.sigma_min * np.exp(self._log_ratio * t_diff)
 
-    def log_q_fwd(self, y: np.ndarray, x: np.ndarray, tau: float) -> float:
-        """log q_τ(y | x) — wrapped Gaussian log-density."""
+    def log_q_fwd(self, y: np.ndarray, x: np.ndarray, t_diff: float) -> float:
+        """log q_t_diff(y | x) — wrapped Gaussian log-density."""
         y = np.asarray(y, dtype=np.float64).ravel()
         x = np.asarray(x, dtype=np.float64).ravel()
-        sig = self.sigma(tau)
+        sig = self.sigma(t_diff)
         sig2 = sig * sig
         K = len(y)
 
@@ -504,11 +504,11 @@ class WrappedGaussianForwardProcess(ForwardProcessBase):
         log_norm = -0.5 * np.log(2.0 * np.pi * sig2)
         return float(np.sum(log_norm + lse))
 
-    def grad_log_q_fwd(self, y: np.ndarray, x: np.ndarray, tau: float) -> np.ndarray:
-        """∇_y log q_τ(y | x) via truncated winding-number sum."""
+    def grad_log_q_fwd(self, y: np.ndarray, x: np.ndarray, t_diff: float) -> np.ndarray:
+        """∇_y log q_t_diff(y | x) via truncated winding-number sum."""
         y = np.asarray(y, dtype=np.float64).ravel()
         x = np.asarray(x, dtype=np.float64).ravel()
-        sig = self.sigma(tau)
+        sig = self.sigma(t_diff)
         sig2 = sig * sig
 
         ks = np.arange(-self.k_max, self.k_max + 1)
@@ -529,20 +529,20 @@ class WrappedGaussianForwardProcess(ForwardProcessBase):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @torch.no_grad()
-def reverse_from_tau(
+def reverse_from_t_diff(
     diffusion: TorsionDiffusion,
     y_np: np.ndarray,
-    tau: float,
+    t_diff: float,
     n_steps: int = 50,
     device: str = "cpu",
 ) -> np.ndarray:
-    """Run reverse SDE from t=τ to t≈0.
+    """Run reverse SDE from t=t_diff to t≈0.
 
     Args:
         diffusion:  TorsionDiffusion loaded from checkpoint.
         y_np:       (K,) noisy dihedral angles (radians).
-        tau:        diffusion time at which y was observed.
-        n_steps:    total steps (actual steps = max(tau * n_steps, 2)).
+        t_diff:        diffusion time at which y was observed.
+        n_steps:    total steps (actual steps = max(t_diff * n_steps, 2)).
         device:     torch device.
 
     Returns:
@@ -555,8 +555,8 @@ def reverse_from_tau(
     x = torch.tensor(y_np, dtype=torch.float32, device=device)
     x = x.reshape(1, 1, K)
 
-    n_eff = max(int(tau * n_steps), 2)
-    ts = torch.linspace(float(tau), 0.0, n_eff + 1, device=device)
+    n_eff = max(int(t_diff * n_steps), 2)
+    ts = torch.linspace(float(t_diff), 0.0, n_eff + 1, device=device)
 
     for i in range(n_eff):
         x = diffusion._reverse_step(x, float(ts[i]), float(ts[i + 1]), device)
@@ -571,7 +571,7 @@ def reverse_from_tau(
 class TorsionDiffusionClient(ClientBase):
     """Client wrapping a trained TorsionDiffusion model for one chain.
 
-    Given noisy dihedrals y = (φ, ψ) at noise level τ, produces a
+    Given noisy dihedrals y = (φ, ψ) at noise level t_diff, produces a
     denoised estimate x₀ by running partial reverse diffusion.
     """
 
@@ -611,14 +611,14 @@ class TorsionDiffusionClient(ClientBase):
             )
         return super().handle_request(request)
 
-    def denoise_sample(self, y: np.ndarray, tau: float,
+    def denoise_sample(self, y: np.ndarray, t_diff: float,
                        seed: Optional[int] = None) -> np.ndarray:
         if seed is not None:
             torch.manual_seed(seed)
-        if tau < 1e-6:
+        if t_diff < 1e-6:
             return np.asarray(y, dtype=np.float64)
-        return reverse_from_tau(
-            self._diffusion, np.asarray(y), tau,
+        return reverse_from_t_diff(
+            self._diffusion, np.asarray(y), t_diff,
             n_steps=self._n_reverse_steps,
             device=self._device,
         )
@@ -708,8 +708,8 @@ class OpenMMMDAggregator(AggregationBase):
         self._aggregate_count = 0
         self._velocity_initialized = False
 
-    def sigma_for_tau(self, tau: float) -> float:
-        return self.sigma_min * np.exp(self._log_ratio * tau)
+    def sigma_for_t_diff(self, t_diff: float) -> float:
+        return self.sigma_min * np.exp(self._log_ratio * t_diff)
 
     def _derive_segments(self):
         chain_sets = [set(atoms) for atoms in self.chain_atom_lists]
@@ -773,7 +773,7 @@ class OpenMMMDAggregator(AggregationBase):
 
         restraint = openmm.CustomTorsionForce(energy_expr)
         restraint.addGlobalParameter("kappa", self.kappa)
-        restraint.addGlobalParameter("sigma", self.sigma_for_tau(1.0))
+        restraint.addGlobalParameter("sigma", self.sigma_for_t_diff(1.0))
         restraint.addGlobalParameter("pi", np.pi)
         restraint.addPerTorsionParameter("theta0")
         restraint.setForceGroup(31)
@@ -946,7 +946,7 @@ class OpenMMMDAggregator(AggregationBase):
     def aggregate(
         self,
         s_current: np.ndarray,
-        tau: float,
+        t_diff: float,
         **kwargs,
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """Aggregate step: MD simulation with diffusion-guided torsion restraints."""
@@ -963,7 +963,7 @@ class OpenMMMDAggregator(AggregationBase):
 
         # 1) Fetch denoised angles from every client
         if xs_override is None:
-            xs = self.fetch_samples(s_current, tau, server, transport)
+            xs = self.fetch_samples(s_current, t_diff, server, transport)
         else:
             xs = xs_override
 
@@ -988,7 +988,7 @@ class OpenMMMDAggregator(AggregationBase):
 
         # 3) Update restraint anchors & strength
         self._update_restraint_anchors(anchors)
-        sigma = self.sigma_for_tau(tau)
+        sigma = self.sigma_for_t_diff(t_diff)
         self._update_restraint_sigma(sigma)
 
         # 4) Set positions
@@ -1038,7 +1038,7 @@ class OpenMMMDAggregator(AggregationBase):
                 centering_active = True
 
         diag = {
-            "tau": tau,
+            "t_diff": t_diff,
             "sigma": sigma,
             "md_steps": self.md_steps,
             "anchor_angles_deg": np.degrees(anchors).tolist(),
@@ -1216,7 +1216,7 @@ class OpenMMIonAggregator(OpenMMMDAggregator):
 
         restraint = openmm.CustomTorsionForce(energy_expr)
         restraint.addGlobalParameter("kappa", self.kappa)
-        restraint.addGlobalParameter("sigma", self.sigma_for_tau(1.0))
+        restraint.addGlobalParameter("sigma", self.sigma_for_t_diff(1.0))
         restraint.addGlobalParameter("pi", np.pi)
         restraint.addPerTorsionParameter("theta0")
         restraint.setForceGroup(31)
@@ -1273,7 +1273,7 @@ def build_monomer_sodium_pipeline(
     master_seed: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Assemble GG-PA components for alanine dipeptide + Na+."""
-    from ggpa.core.kernel import FixedTauKernel
+    from ggpa.core.kernel import FixedDiffusionTimeKernel
     from ggpa.core.state import State
     from ggpa.server.context import UniformContext
 
@@ -1323,7 +1323,7 @@ def build_monomer_sodium_pipeline(
     )
 
     context = UniformContext()
-    kernel = FixedTauKernel.from_clients(
+    kernel = FixedDiffusionTimeKernel.from_clients(
         clients=clients,
         aggregator=aggregator,
         context=context,
@@ -1374,7 +1374,7 @@ def build_dimer_pipeline(
     Returns a dictionary with:
         kernel, clients, aggregator, context, torsion_info, init_state, diffusion
     """
-    from ggpa.core.kernel import FixedTauKernel
+    from ggpa.core.kernel import FixedDiffusionTimeKernel
     from ggpa.core.state import State
     from ggpa.server.context import UniformContext
 
@@ -1434,7 +1434,7 @@ def build_dimer_pipeline(
 
     context = UniformContext()
 
-    kernel = FixedTauKernel.from_clients(
+    kernel = FixedDiffusionTimeKernel.from_clients(
         clients=clients,
         aggregator=aggregator,
         context=context,
@@ -1474,20 +1474,20 @@ class AlanineReplicaExchange:
     Usage::
 
         pipes = [build_dimer_pipeline(...) for _ in range(4)]
-        re = AlanineReplicaExchange(pipes, taus=[0.05, 0.1, 0.2, 0.4])
+        re = AlanineReplicaExchange(pipes, t_diffs=[0.05, 0.1, 0.2, 0.4])
         results = re.run(n_blocks=500, inner_steps=1, init_states=...)
     """
 
     def __init__(
         self,
         pipes: List[Dict[str, Any]],
-        taus: List[float],
+        t_diffs: List[float],
         rng_seed: Optional[int] = None,
     ):
-        assert len(pipes) == len(taus)
+        assert len(pipes) == len(t_diffs)
         self.pipes = pipes
-        self.taus = list(taus)
-        self.n_replicas = len(taus)
+        self.t_diffs = list(t_diffs)
+        self.n_replicas = len(t_diffs)
         self.rng = np.random.default_rng(rng_seed)
         self.torsion_info = pipes[0]["torsion_info"]
         self.client_ids = sorted(list(pipes[0]["clients"].keys()))
@@ -1511,13 +1511,13 @@ class AlanineReplicaExchange:
             ]
         )
 
-    def _denoise_replica(self, rep_idx: int, state, tau: float) -> Dict[str, np.ndarray]:
+    def _denoise_replica(self, rep_idx: int, state, t_diff: float) -> Dict[str, np.ndarray]:
         kernel = self.pipes[rep_idx]["kernel"]
         server = kernel.server
         transport = kernel.transport
 
         requests = server.create_requests(
-            s=state.s, tau=tau, request_types="sample", step=state.step,
+            s=state.s, t_diff=t_diff, request_types="sample", step=state.step,
         )
         replies = transport.call_all(requests.values())
 
@@ -1537,16 +1537,16 @@ class AlanineReplicaExchange:
         from ggpa.utils.utils import seed_for_server
 
         for _ in range(inner_steps):
-            for i, tau in enumerate(self.taus):
+            for i, t_diff in enumerate(self.t_diffs):
                 state_i = states[i]
-                xs = self._denoise_replica(i, state_i, tau)
+                xs = self._denoise_replica(i, state_i, t_diff)
 
                 aggregator = self.pipes[i]["aggregator"]
                 kernel = self.pipes[i]["kernel"]
 
                 s_new, _ = aggregator.aggregate(
                     s_current=state_i.s,
-                    tau=tau,
+                    t_diff=t_diff,
                     server=kernel.server,
                     transport=kernel.transport,
                     context=kernel.server.context,
@@ -1578,18 +1578,18 @@ class AlanineReplicaExchange:
         start = 1 if (block_idx % 2 == 1) else 0
         for idx in range(start, self.n_replicas - 1, 2):
             i, j = idx, idx + 1
-            tau_i, tau_j = self.taus[i], self.taus[j]
+            t_diff_i, t_diff_j = self.t_diffs[i], self.t_diffs[j]
             state_i, state_j = states[i], states[j]
 
             self._inject_client_xs(i, self._replica_xs[i])
             kernel_i = self.pipes[i]["kernel"]
-            u_i_i = float(kernel_i.reduced_potential(state_i, tau_i).u_tau)
-            u_j_i = float(kernel_i.reduced_potential(state_i, tau_j).u_tau)
+            u_i_i = float(kernel_i.reduced_potential(state_i, t_diff_i).u_t_diff)
+            u_j_i = float(kernel_i.reduced_potential(state_i, t_diff_j).u_t_diff)
 
             self._inject_client_xs(j, self._replica_xs[j])
             kernel_j = self.pipes[j]["kernel"]
-            u_j_j = float(kernel_j.reduced_potential(state_j, tau_j).u_tau)
-            u_i_j = float(kernel_j.reduced_potential(state_j, tau_i).u_tau)
+            u_j_j = float(kernel_j.reduced_potential(state_j, t_diff_j).u_t_diff)
+            u_i_j = float(kernel_j.reduced_potential(state_j, t_diff_i).u_t_diff)
 
             log_alpha = -(u_i_j + u_j_i) + (u_i_i + u_j_j)
             accept = log_alpha >= 0.0
@@ -1630,7 +1630,7 @@ class AlanineReplicaExchange:
 
         Returns:
             Dictionary with dihedrals, x_dihedrals, positions, swap_log,
-            taus, acceptance_rates, wall_time_s, states.
+            t_diffs, acceptance_rates, wall_time_s, states.
         """
         import time as _time
 
@@ -1649,8 +1649,8 @@ class AlanineReplicaExchange:
         positions = {i: [] for i in range(self.n_replicas)} if save_positions else None
         swap_log: List[List[Dict]] = []
 
-        for rep, tau in enumerate(self.taus):
-            self._denoise_replica(rep, self.states[rep], tau)
+        for rep, t_diff in enumerate(self.t_diffs):
+            self._denoise_replica(rep, self.states[rep], t_diff)
 
         t0 = _time.time()
         for block in range(n_blocks):
@@ -1670,7 +1670,7 @@ class AlanineReplicaExchange:
                     xs_rep = self._replica_xs[rep]
                     if xs_rep is None:
                         xs_rep = self._denoise_replica(
-                            rep, self.states[rep], self.taus[rep]
+                            rep, self.states[rep], self.t_diffs[rep]
                         )
                     x_concat = self._concat_xs(xs_rep)
                     x_dihedrals_rad[rep].append(x_concat)
@@ -1709,7 +1709,7 @@ class AlanineReplicaExchange:
             "x_dihedrals_rad": x_dihedrals_rad,
             "positions": positions,
             "swap_log": swap_log,
-            "taus": np.array(self.taus),
+            "t_diffs": np.array(self.t_diffs),
             "acceptance_rates": acceptance,
             "wall_time_s": wall_time,
             "states": self.states,

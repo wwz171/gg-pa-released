@@ -8,7 +8,7 @@ def test_top_level_import_is_lightweight():
     import ggpa
 
     assert ggpa.__version__
-    assert ggpa.FixedTauKernel.__name__ == "FixedTauKernel"
+    assert ggpa.FixedDiffusionTimeKernel.__name__ == "FixedDiffusionTimeKernel"
     assert ggpa.State.__name__ == "State"
 
 
