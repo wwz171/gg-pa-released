@@ -23,6 +23,7 @@ var/
 venv/
 env/
 ENV/
+.venv*
 
 # Notebook and OS cruft
 .ipynb_checkpoints/

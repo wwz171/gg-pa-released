@@ -8,7 +8,7 @@ import numpy as np
 
 from ggpa.core.kernel import FixedTauKernel
 from ggpa.core.state import State
-from ggpa.core.errors import ConfigurationError
+from ggpa.core.errors import ConfigurationError, NotSupportedError
 from ggpa.utils.utils import rng_from_seed
 
 
@@ -72,11 +72,15 @@ class AnnealingDriver:
 
 @dataclass
 class ReplicaExchangeDriver:
-    """Replica exchange driver using reduced potentials for swaps.
+    """Experimental generic replica-exchange driver.
 
-    Runs multiple replicas at different tau values in parallel and
-    periodically attempts swaps between adjacent replicas using a
-    Metropolis-Hastings criterion.
+    This helper is intentionally disabled in the public release.
+    The current research code uses system-specific replica-exchange
+    implementations that explicitly manage the per-replica latent
+    ``x`` states needed for correct swap bookkeeping:
+
+    - ``ggpa.systems.phi4.LatticeRERunner``
+    - ``ggpa.systems.alanine_dipeptide.AlanineReplicaExchange``
 
     Attributes:
         kernel: The FixedTauKernel shared by all replicas.
@@ -106,22 +110,11 @@ class ReplicaExchangeDriver:
         Raises:
             ConfigurationError: If len(states) != len(taus).
         """
-        if len(states) != len(self.taus):
-            raise ConfigurationError("states and taus must have same length")
-        if self.rng is None:
-            self.rng = rng_from_seed(self.master_seed)
-        diagnostics = []
-        for block in range(n_blocks):
-            for i, tau in enumerate(self.taus):
-                current = states[i]
-                for _ in range(inner_steps):
-                    current, _ = self.kernel.step(current, tau)
-                states[i] = current
-
-            if (block + 1) % self.swap_interval == 0:
-                diag = self._attempt_swaps(states)
-                diagnostics.append(diag)
-        return states, diagnostics
+        raise NotSupportedError(
+            "ReplicaExchangeDriver is experimental and disabled in the public release. "
+            "Use ggpa.systems.phi4.LatticeRERunner or "
+            "ggpa.systems.alanine_dipeptide.AlanineReplicaExchange instead."
+        )
 
     def _attempt_swaps(self, states: List[State]) -> dict:
         """Attempt pairwise swaps between adjacent replicas.

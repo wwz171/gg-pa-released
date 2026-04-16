@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this repository, please cite it using the metadata from this file."
+type: software
+title: "GG-PA: Generative Gibbs for Physics-Aware Sampling"
+version: "0.1.0"
+authors:
+  - family-names: "Wang"
+    given-names: "Weizhou"
+repository-code: "https://github.com/wwz171/gg-pa-released"
+url: "https://github.com/wwz171/gg-pa-released"
+license: "MIT"
+abstract: "Reference research code for GG-PA, a generative Gibbs framework for coupling pretrained diffusion priors with explicit physical contexts in an augmented space."
+keywords:
+  - "diffusion models"
+  - "sampling"
+  - "replica exchange"
+  - "statistical physics"
+  - "mcmc"
+
+# preferred-citation:
+#   type: article
+#   authors:
+#     - family-names: "Wang"
+#       given-names: "Weizhou"
+#   title: ""
+#   journal: ""
+#   year:
+#   doi: ""
