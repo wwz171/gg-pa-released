@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Public GG-PA example for alanine dipeptide + Na+."""
+"""Released GG-PA example for AD-Na+."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--single-run",
         action="store_true",
-        help="Run one standalone trajectory instead of the default public ensemble.",
+        help="Run one standalone trajectory instead of the default released ensemble.",
     )
     parser.add_argument(
         "--save-dcd",
@@ -111,7 +111,7 @@ def run_ad_sodium_once(
     torch.manual_seed(seed)
 
     print(
-        "Running alanine dipeptide + Na+ GG-PA example "
+        "Running AD-Na+ GG-PA example "
         f"(t_diff={section['t_diff']}, steps={section['n_steps']}, device={shared['device']}, "
         f"platform={shared['platform_name']})"
     )
@@ -325,7 +325,7 @@ def run_ad_sodium_ensemble(
     n_trajectories = len(seeds)
 
     print(
-        "Running AD+Na zero-shot GG-PA ensemble "
+        "Running AD-Na+ zero-shot GG-PA ensemble "
         f"({n_trajectories} trajectories, {n_steps} GG-PA steps each, burn-in={burnin_fraction:.2f})"
     )
 
@@ -428,11 +428,11 @@ def run_ad_sodium_ensemble(
 
         plot_ad_sodium_ensemble(output_root, fig_dir)
         print(
-            "Finished AD+Na zero-shot ensemble. "
+            "Finished AD-Na+ zero-shot ensemble. "
             f"aggregate: {aggregate_path}; figures: {fig_dir / 'ad_sodium_rama_triptych.png'}"
         )
     else:
-        print(f"Finished AD+Na zero-shot ensemble. aggregate: {aggregate_path}")
+        print(f"Finished AD-Na+ zero-shot ensemble. aggregate: {aggregate_path}")
 
     return {
         "output_dir": output_root,

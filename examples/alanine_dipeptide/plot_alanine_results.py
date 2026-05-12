@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot saved results from the public alanine-dipeptide examples."""
+"""Plot saved results from the released alanine-dipeptide examples."""
 
 from __future__ import annotations
 
@@ -133,7 +133,7 @@ def plot_ad_sodium(result_path: str | Path, output_dir: str | Path) -> None:
     else:
         axes[1, 2].axis("off")
 
-    fig.suptitle("Alanine Dipeptide + Na+", fontsize=13)
+    fig.suptitle("AD-Na+", fontsize=13)
     fig.savefig(output_dir / "ad_sodium_overview.png", dpi=200)
     fig.savefig(output_dir / "ad_sodium_overview.pdf")
     plt.close(fig)
@@ -283,7 +283,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "mode",
         choices=["ad-sodium", "ad-sodium-single", "ad-dimer", "all"],
-        help="Which public alanine example to plot.",
+        help="Which released alanine example to plot.",
     )
     parser.add_argument("--config", type=str, default=None, help="Path to YAML config.")
     parser.add_argument("--result-dir", type=str, default=None, help="Override the result directory for the selected mode.")

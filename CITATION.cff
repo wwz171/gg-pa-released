@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use this repository, please cite it using the metadata from this file."
+message: "If you use this repository, please cite the preferred paper citation and the software record from this file."
 type: software
 title: "GG-PA: Generative Gibbs for Physics-Aware Sampling"
 version: "0.1.0"
@@ -9,7 +9,7 @@ authors:
 repository-code: "https://github.com/wwz171/gg-pa-released"
 url: "https://github.com/wwz171/gg-pa-released"
 license: "MIT"
-abstract: "Reference research code for GG-PA, a generative Gibbs framework for coupling pretrained diffusion priors with explicit physical contexts in an augmented space."
+abstract: "Reference research code for GG-PA, a training-free generative Gibbs framework for composing pretrained diffusion priors with explicit physical context in an augmented state space."
 keywords:
   - "diffusion models"
   - "sampling"
@@ -17,12 +17,17 @@ keywords:
   - "statistical physics"
   - "mcmc"
 
-# preferred-citation:
-#   type: article
-#   authors:
-#     - family-names: "Wang"
-#       given-names: "Weizhou"
-#   title: ""
-#   journal: ""
-#   year:
-#   doi: ""
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Wang"
+      given-names: "Weizhou"
+    - family-names: "Weare"
+      given-names: "Jonathan"
+    - family-names: "Dinner"
+      given-names: "Aaron R."
+  title: "Composing diffusion priors with explicit physical context via generative Gibbs sampling"
+  journal: "arXiv preprint arXiv:2605.10642"
+  year: 2026
+  doi: "10.48550/arXiv.2605.10642"
+  url: "https://arxiv.org/abs/2605.10642"

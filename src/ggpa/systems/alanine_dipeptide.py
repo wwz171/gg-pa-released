@@ -4,10 +4,10 @@ r"""Alanine dipeptide torsion-space systems for GG-PA.
 
 This module provides GG-PA components for sampling alanine dipeptide systems
 with a shared torsion-space diffusion prior coupled to OpenMM molecular
-dynamics. The public workflows currently supported here are:
+dynamics. The released workflows currently supported here are:
 
-- alanine dipeptide + Na+ (single monomer, single-``t_diff`` GG-PA)
-- alanine dipeptide dimer (two monomers, replica-exchange GG-PA)
+- AD-Na+ (single monomer, single-``t_diff`` GG-PA)
+- AD dimer (two monomers, replica-exchange GG-PA)
 
 Signal space: full-atom Cartesian coordinates  s ∈ R^{N_atoms × 3}  (nm)
 Each client projects s → (φ, ψ) dihedral angles for one monomer.
@@ -193,7 +193,7 @@ def extract_monomer_torsion_indices(pdb_path: str) -> Dict[str, Any]:
 def extract_monomer_oxygen_indices(pdb_path: str) -> Dict[str, Any]:
     """Return the two carbonyl oxygen atom indices for one alanine-dipeptide monomer.
 
-    The public AD+Na analysis uses the O-O distance between the two backbone
+    The released AD-Na+ analysis uses the O-O distance between the two backbone
     carbonyl oxygens. We identify them directly from topology rather than
     hard-coding atom numbers.
     """
@@ -1272,7 +1272,7 @@ def build_monomer_sodium_pipeline(
     leash_k_kj_mol_nm2: float = 50.0,
     master_seed: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Assemble GG-PA components for alanine dipeptide + Na+."""
+    """Assemble GG-PA components for AD-Na+."""
     from ggpa.core.kernel import FixedDiffusionTimeKernel
     from ggpa.core.state import State
     from ggpa.server.context import UniformContext
@@ -1945,7 +1945,7 @@ def _wrap_angle_delta(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 def classify_dimer_monomer_basin(dihedrals_rad: np.ndarray) -> np.ndarray:
     """Assign dimer monomer torsions to reference-driven L/R/U basins.
 
-    The public dimer diagnostics use two coarse monomer basins derived from the
+    The released dimer diagnostics use two coarse monomer basins derived from the
     bundled MD reference. Frames inside the left/right basin radii are labeled
     ``L``/``R`` and the remaining frames are labeled ``U``.
     """
@@ -1973,7 +1973,7 @@ def classify_dimer_monomer_basin(dihedrals_rad: np.ndarray) -> np.ndarray:
 
 
 def classify_states(res: Dict[str, Any]) -> np.ndarray:
-    """Classify each frame into coarse dimer states using the public basin model.
+    """Classify each frame into coarse dimer states using the released basin model.
 
     Monomers are first assigned to reference-driven ``L/R/U`` basins in
     ``(phi, psi)`` space. Bound antiparallel ``LL`` frames are labeled

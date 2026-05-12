@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Reproducible phi4 GG-PA replica-exchange scans driven by a YAML config.
+"""Reproducible Ginzburg-Landau phi^4 GG-PA replica-exchange scans.
 
-This script is the public counterpart to the older
-`exps/Ginzburg_Landau` workflows. It reproduces two paper-facing scans:
+This script reproduces two paper-facing scans:
 
 1. `phase-transition`
    Zero-field (`h=0`) replica-exchange scan across `J`.

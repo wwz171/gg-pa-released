@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared helpers for the public alanine-dipeptide examples."""
+"""Shared helpers for the released alanine-dipeptide examples."""
 
 from __future__ import annotations
 

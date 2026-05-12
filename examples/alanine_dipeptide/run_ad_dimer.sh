@@ -2,8 +2,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CONFIG="${1:-$ROOT/configs/alanine_dipeptide_example.yaml}"
-shift || true
+CONFIG="$ROOT/configs/alanine_dipeptide_example.yaml"
+if [ "$#" -gt 0 ] && [[ "$1" != -* ]]; then
+  CONFIG="$1"
+  shift
+fi
 ENV_NAME="${GGPA_CONDA_ENV:-}"
 LOG_DIR="$ROOT/examples/alanine_dipeptide/logs"
 mkdir -p "$LOG_DIR"

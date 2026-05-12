@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot phi4 paper figures from raw results generated under examples/phi4."""
+"""Plot Ginzburg-Landau phi^4 paper figures from raw results."""
 
 from __future__ import annotations
 
@@ -393,7 +393,7 @@ def make_critical_publication_plots(
                 **common_kw,
             )
         ax.axvline(gamma_c, ls="--", color="0.4", lw=0.5, zorder=0)
-        ax.set_xlabel(r"Coupling $\gamma$")
+        ax.set_xlabel(r"Coupling $J$")
         ax.set_ylabel(r"Magnetization $\langle M \rangle$")
         ax.legend(loc="upper left", handlelength=1.8, columnspacing=1.0)
         ax.tick_params(which="both", top=True, right=True)
@@ -425,7 +425,7 @@ def make_critical_publication_plots(
                 **common_kw,
             )
         ax.axvline(0.0, ls="--", color="0.5", lw=0.4, zorder=0)
-        ax.set_xlabel(r"$(\gamma - \gamma_c)\, /\, h^{8/15}$")
+        ax.set_xlabel(r"$(J - J_c)\, /\, h^{8/15}$")
         ax.set_ylabel(r"$M \, / \, h^{1/15}$")
         ax.legend(loc="upper left", handlelength=1.8)
         ax.tick_params(which="both", top=True, right=True)
@@ -457,7 +457,7 @@ def make_critical_publication_plots(
                 **common_kw,
             )
         ax.axvline(0.0, ls="--", color="0.5", lw=0.4, zorder=0)
-        ax.set_xlabel(r"$(\gamma - \gamma_c)\, /\, h^{8/15}$")
+        ax.set_xlabel(r"$(J - J_c)\, /\, h^{8/15}$")
         ax.set_ylabel(r"$\chi \cdot h^{14/15}$")
         ax.legend(loc="upper left", handlelength=1.8)
         ax.tick_params(which="both", top=True, right=True)
@@ -540,18 +540,18 @@ def make_critical_publication_combined_plot(
             )
 
         axes[0].axvline(gamma_c, ls="--", color="0.4", lw=0.5, zorder=0)
-        axes[0].set_xlabel(r"Coupling $\gamma$")
+        axes[0].set_xlabel(r"Coupling $J$")
         axes[0].set_ylabel(r"Magnetization $\langle M \rangle$")
         axes[0].tick_params(which="both", top=True, right=True)
         axes[0].legend(loc="upper left", handlelength=1.6, columnspacing=0.8)
 
         axes[1].axvline(0.0, ls="--", color="0.5", lw=0.4, zorder=0)
-        axes[1].set_xlabel(r"$(\gamma - \gamma_c)\, /\, h^{8/15}$")
+        axes[1].set_xlabel(r"$(J - J_c)\, /\, h^{8/15}$")
         axes[1].set_ylabel(r"$M \, / \, h^{1/15}$")
         axes[1].tick_params(which="both", top=True, right=True)
 
         axes[2].axvline(0.0, ls="--", color="0.5", lw=0.4, zorder=0)
-        axes[2].set_xlabel(r"$(\gamma - \gamma_c)\, /\, h^{8/15}$")
+        axes[2].set_xlabel(r"$(J - J_c)\, /\, h^{8/15}$")
         axes[2].set_ylabel(r"$\chi \cdot h^{14/15}$")
         axes[2].tick_params(which="both", top=True, right=True)
 
@@ -600,14 +600,14 @@ def make_critical_tau_vs_gamma_plot(
                 label=fr"$h = {hv:.3f}$",
             )
         ax.axvline(gamma_c, ls="--", color="0.4", lw=0.5, zorder=0)
-        ax.set_xlabel(r"Coupling $\gamma$")
+        ax.set_xlabel(r"Coupling $J$")
         ax.set_ylabel(r"$\tau_{\mathrm{int}}$")
         ax.set_title("IAT across the scaling window")
         ax.legend(loc="upper left", handlelength=1.6, columnspacing=0.8)
         ax.tick_params(which="both", top=True, right=True)
         ax.grid(alpha=0.15)
-        png_path = output_dir / "critical_tau_vs_gamma.png"
-        pdf_path = output_dir / "critical_tau_vs_gamma.pdf"
+        png_path = output_dir / "critical_tau_vs_j.png"
+        pdf_path = output_dir / "critical_tau_vs_j.pdf"
         fig.savefig(png_path)
         fig.savefig(pdf_path)
         plt.close(fig)
@@ -657,7 +657,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--phase-dir", type=Path, default=None)
     parser.add_argument("--critical-dir", type=Path, default=None)
     parser.add_argument("--fig-dir", type=Path, default=None)
-    parser.add_argument("--gamma-c", type=float, default=None)
+    parser.add_argument("--j-c", "--gamma-c", dest="gamma_c", metavar="J_C", type=float, default=None)
     parser.add_argument("--beta", type=float, default=None)
     parser.add_argument("--delta", type=float, default=None)
     parser.add_argument(
@@ -732,8 +732,8 @@ def main() -> int:
             Path(fig_dir),
             gamma_c=gamma_c,
         )
-        print(f"Saved critical tau-vs-gamma figure: {tau_png}")
-        print(f"Saved critical tau-vs-gamma figure: {tau_pdf}")
+        print(f"Saved critical tau-vs-J figure: {tau_png}")
+        print(f"Saved critical tau-vs-J figure: {tau_pdf}")
         iat_png, iat_pdf = make_critical_iat_plot(
             records,
             Path(fig_dir),

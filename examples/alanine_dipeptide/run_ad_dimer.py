@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Public GG-PA replica-exchange example for the alanine dipeptide dimer."""
+"""Released GG-PA-RE example for the AD dimer."""
 
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def run_ad_dimer_once(
     t_diff_list = [float(t_diff) for t_diff in section["t_diff_list"]]
     n_replicas = len(t_diff_list)
     print(
-        "Running alanine dipeptide dimer RE example "
+        "Running AD dimer GG-PA-RE example "
         f"(replicas={n_replicas}, t_diffs={t_diff_list}, blocks={section['n_blocks']}, "
         f"device={shared['device']}, platform={shared['platform_name']})"
     )

@@ -25,6 +25,7 @@ phase_transition:
   burnin_fraction: 0.3
   save_all_replicas: true
   output_dir: examples/phi4/results/phase_transition
+  # Legacy key name: gamma denotes the paper's lattice coupling J.
   gamma_grid_segments:
     - start: 0.05
       stop: 0.95
@@ -43,6 +44,7 @@ critical_scaling:
   resume: false
   output_dir: examples/phi4/results/critical_scaling
   h_values: [0.008, 0.012, 0.02]
+  # Legacy key name: gamma_c is J_c in the paper.
   gamma_c: 0.436
   window_half: 2.0
   n_gamma: 10
@@ -51,6 +53,7 @@ critical_scaling:
 
 plotting:
   output_dir: examples/phi4/results/figures
+  # Legacy key name: gamma_c is J_c in the paper.
   gamma_c: 0.436
   beta: 0.125
   delta: 15.0

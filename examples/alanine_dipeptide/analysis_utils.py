@@ -1,4 +1,4 @@
-"""Shared analysis utilities for the public alanine-dipeptide examples."""
+"""Shared analysis utilities for the released alanine-dipeptide examples."""
 
 from __future__ import annotations
 
@@ -114,7 +114,7 @@ def save_ad_sodium_reference_npz(
     source_label: str,
     topology_pdb: str | Path,
 ) -> Path:
-    """Save one curated AD+Na comparison dataset with a unified schema."""
+    """Save one curated AD-Na+ comparison dataset with a unified schema."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     oxygen_meta = extract_monomer_oxygen_indices(str(topology_pdb))
@@ -158,7 +158,7 @@ def load_reference_dihedrals(
 
 
 def load_curated_ad_sodium_reference(path: str | Path) -> Dict[str, np.ndarray]:
-    """Load one curated AD+Na comparison dataset from `data/ad_sodium_ref`."""
+    """Load one curated AD-Na+ comparison dataset from `data/ad_sodium_ref`."""
     payload = np.load(path, allow_pickle=True)
     return {
         "dihedrals_rad": np.asarray(payload["dihedrals_rad"], dtype=np.float64),
@@ -346,7 +346,7 @@ def load_ad_dimer_result(result_path: str | Path) -> Dict[str, np.ndarray]:
 
 
 def strict_dimer_masks(dimer_payload: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
-    """Return strict antiparallel/parallel masks using the current public criteria."""
+    """Return strict antiparallel/parallel masks using the released criteria."""
     res = {
         "cosine_similarities": dimer_payload["analysis_cosine_similarities"],
         "hbond_counts": dimer_payload["analysis_hbond_counts"],

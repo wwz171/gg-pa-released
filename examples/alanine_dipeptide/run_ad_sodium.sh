@@ -2,8 +2,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CONFIG="${1:-$ROOT/configs/alanine_dipeptide_example.yaml}"
-shift || true
+CONFIG="$ROOT/configs/alanine_dipeptide_example.yaml"
+if [ "$#" -gt 0 ] && [[ "$1" != -* ]]; then
+  CONFIG="$1"
+  shift
+fi
 ENV_NAME="${GGPA_CONDA_ENV:-}"
 LOG_DIR="$ROOT/examples/alanine_dipeptide/logs"
 mkdir -p "$LOG_DIR"
@@ -23,7 +26,7 @@ set -euo pipefail
 trap 'rm -f "$PID_FILE" "$JOB_FILE"' EXIT
 python -u "$ROOT/examples/alanine_dipeptide/run_ad_sodium.py" --config "$CONFIG" $EXTRA_ARGS_STR
 echo
-echo "AD+Na ensemble complete. Generating figures..."
+echo "AD-Na+ ensemble complete. Generating figures..."
 python -u "$ROOT/examples/alanine_dipeptide/plot_alanine_results.py" --config "$CONFIG" ad-sodium
 EOF
 chmod +x "$JOB_FILE"
@@ -37,7 +40,7 @@ else
 fi
 
 echo $! >"$PID_FILE"
-echo "Started AD+Na zero-shot ensemble in background."
+echo "Started AD-Na+ zero-shot ensemble in background."
 echo "  env: $ENV_MSG"
 echo "  log: $LOG_FILE"
 echo "  pid: $(cat "$PID_FILE")"
